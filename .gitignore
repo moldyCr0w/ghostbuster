@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Build output
+client/dist/
+
+# Database — contains real candidate data, never commit
+*.db
+*.db-shm
+*.db-wal
+
+# Uploaded resumes — potentially sensitive personal data
+uploads/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
