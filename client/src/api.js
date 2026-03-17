@@ -16,15 +16,20 @@ export const api = {
   createCandidate:    (data)    => req('/candidates',      { method: 'POST',   body: JSON.stringify(data) }),
   updateCandidate:    (id, data)=> req(`/candidates/${id}`,{ method: 'PUT',    body: JSON.stringify(data) }),
   deleteCandidate:    (id)      => req(`/candidates/${id}`,{ method: 'DELETE' }),
-  acknowledgeCandidate:(id)     => req(`/candidates/${id}/acknowledge`, { method: 'POST' }),
+  acknowledgeCandidate:(id, data = {}) => req(`/candidates/${id}/acknowledge`, { method: 'POST', body: JSON.stringify(data) }),
 
-  // Resume upload / delete (multipart — cannot use the json req() helper)
+  // Resume upload / delete / parse (multipart — cannot use the json req() helper)
   uploadResume: (id, file) => {
     const fd = new FormData();
     fd.append('resume', file);
     return fetch(`${BASE}/candidates/${id}/resume`, { method: 'POST', body: fd }).then(r => r.json());
   },
   deleteResume: (id) => req(`/candidates/${id}/resume`, { method: 'DELETE' }),
+  parseResume: (file) => {
+    const fd = new FormData();
+    fd.append('resume', file);
+    return fetch(`${BASE}/candidates/parse-resume`, { method: 'POST', body: fd }).then(r => r.json());
+  },
 
   // Candidate ↔ Req junction
   getCandidateReqs:   (cid)     => req(`/candidates/${cid}/reqs`),

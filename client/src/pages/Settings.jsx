@@ -34,10 +34,12 @@ export default function Settings() {
   const [newName, setNewName]   = useState('');
   const [newColor, setNewColor] = useState(COLORS[0]);
   const [newTerm, setNewTerm]   = useState(false);
+  const [newHire, setNewHire]   = useState(false);
   const [editId, setEditId]     = useState(null);
   const [editName, setEditName]   = useState('');
   const [editColor, setEditColor] = useState('');
   const [editTerm, setEditTerm]   = useState(false);
+  const [editHire, setEditHire]   = useState(false);
   const [error, setError]       = useState('');
 
   const load = useCallback(async () => {
@@ -50,10 +52,11 @@ export default function Settings() {
     e.preventDefault();
     if (!newName.trim()) return;
     setError('');
-    await api.createStage({ name: newName.trim(), color: newColor, is_terminal: newTerm });
+    await api.createStage({ name: newName.trim(), color: newColor, is_terminal: newTerm || newHire, is_hire: newHire });
     setNewName('');
     setNewColor(COLORS[0]);
     setNewTerm(false);
+    setNewHire(false);
     load();
   };
 
@@ -69,14 +72,16 @@ export default function Settings() {
     setEditName(stage.name);
     setEditColor(stage.color);
     setEditTerm(!!stage.is_terminal);
+    setEditHire(!!stage.is_hire);
   };
 
   const saveEdit = async (stage) => {
     await api.updateStage(stage.id, {
-      name: editName,
-      color: editColor,
+      name:        editName,
+      color:       editColor,
       order_index: stage.order_index,
-      is_terminal: editTerm,
+      is_terminal: editTerm || editHire,  // hire stages are always terminal
+      is_hire:     editHire,
     });
     setEditId(null);
     load();
@@ -87,8 +92,8 @@ export default function Settings() {
     const swap = stages[dir === 'up' ? idx - 1 : idx + 1];
     if (!swap) return;
     await Promise.all([
-      api.updateStage(stage.id, { name: stage.name, color: stage.color, order_index: swap.order_index, is_terminal: stage.is_terminal }),
-      api.updateStage(swap.id,  { name: swap.name,  color: swap.color,  order_index: stage.order_index, is_terminal: swap.is_terminal }),
+      api.updateStage(stage.id, { name: stage.name, color: stage.color, order_index: swap.order_index,  is_terminal: stage.is_terminal, is_hire: stage.is_hire }),
+      api.updateStage(swap.id,  { name: swap.name,  color: swap.color,  order_index: stage.order_index, is_terminal: swap.is_terminal,  is_hire: swap.is_hire }),
     ]);
     load();
   };
@@ -132,8 +137,18 @@ export default function Settings() {
                         checked={editTerm}
                         onChange={e => setEditTerm(e.target.checked)}
                         className="rounded"
+                        disabled={editHire}
                       />
                       Terminal
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-green-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editHire}
+                        onChange={e => { setEditHire(e.target.checked); if (e.target.checked) setEditTerm(true); }}
+                        className="rounded"
+                      />
+                      Hire
                     </label>
                     <button onClick={() => saveEdit(stage)} className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Save</button>
                     <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200">Cancel</button>
@@ -143,7 +158,9 @@ export default function Settings() {
                   <>
                     <ColorDot color={stage.color} />
                     <span className="flex-1 text-sm text-slate-800 font-medium">{stage.name}</span>
-                    {stage.is_terminal ? (
+                    {stage.is_hire ? (
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">Hire</span>
+                    ) : stage.is_terminal ? (
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">Terminal</span>
                     ) : null}
                     <div className="flex items-center gap-1 ml-2">
@@ -183,16 +200,28 @@ export default function Settings() {
               <ColorPicker value={newColor} onChange={setNewColor} />
             </div>
           </div>
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={newTerm}
-                onChange={e => setNewTerm(e.target.checked)}
-                className="rounded"
-              />
-              Terminal stage (exclude from reminders)
-            </label>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newTerm}
+                  onChange={e => setNewTerm(e.target.checked)}
+                  className="rounded"
+                  disabled={newHire}
+                />
+                Terminal
+              </label>
+              <label className="flex items-center gap-2 text-sm text-green-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newHire}
+                  onChange={e => { setNewHire(e.target.checked); if (e.target.checked) setNewTerm(true); }}
+                  className="rounded"
+                />
+                Hire stage
+              </label>
+            </div>
             <button
               type="submit"
               className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"

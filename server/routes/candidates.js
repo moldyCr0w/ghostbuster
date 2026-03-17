@@ -10,6 +10,8 @@ const fs      = require('fs');
 const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+const ALLOWED_EXTS = ['.pdf', '.doc', '.docx'];
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename:    (req, file, cb) => {
@@ -22,14 +24,88 @@ const upload = multer({
   storage,
   limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.pdf', '.doc', '.docx'];
-    if (allowed.includes(path.extname(file.originalname).toLowerCase())) {
+    if (ALLOWED_EXTS.includes(path.extname(file.originalname).toLowerCase())) {
       cb(null, true);
     } else {
       cb(new Error('Only PDF or Word documents are accepted'));
     }
   },
 });
+
+// In-memory multer for parse-only (no disk write)
+const uploadMem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_EXTS.includes(path.extname(file.originalname).toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF or Word documents are accepted'));
+    }
+  },
+});
+
+/* ─── resume text extraction & parsing ──────────────────────── */
+
+async function extractText(buffer, ext) {
+  try {
+    if (ext === '.pdf') {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(buffer);
+      return data.text || '';
+    }
+    if (ext === '.docx' || ext === '.doc') {
+      const mammoth = require('mammoth');
+      const result  = await mammoth.extractRawText({ buffer });
+      return result.value || '';
+    }
+  } catch (_) { /* fall through */ }
+  return '';
+}
+
+function parseResumeText(text) {
+  // ── Email ────────────────────────────────────────────────────
+  const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+  const email = emailMatch ? emailMatch[0].toLowerCase() : null;
+
+  // ── LinkedIn URL ─────────────────────────────────────────────
+  const liMatch = text.match(
+    /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[\w%\-_.]+\/?/i
+  );
+  let linkedin_url = null;
+  if (liMatch) {
+    linkedin_url = liMatch[0].startsWith('http')
+      ? liMatch[0].replace(/\/$/, '')
+      : 'https://' + liMatch[0].replace(/\/$/, '');
+  }
+
+  // ── Name — scan the first ~20 lines for "Firstname Lastname" ─
+  // Heuristic: first short line (≤ 50 chars) that looks like
+  // 2–4 properly-capitalised words and isn't contact noise.
+  let first_name = null;
+  let last_name  = null;
+
+  const NOISE = /@|https?:|linkedin|github|twitter|phone|address|resume|curriculum|vitae|\.(com|edu|org|io|net)\b/i;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines.slice(0, 20)) {
+    if (NOISE.test(line))        continue; // looks like contact info
+    if (/^\d/.test(line))        continue; // starts with a digit
+    if (line.length > 50)        continue; // too long for a name
+    if (line.length < 3)         continue;
+
+    // Each word should start with a capital letter (allows hyphens/apostrophes)
+    const words = line.split(/\s+/);
+    if (words.length < 2 || words.length > 4) continue;
+    if (!words.every(w => /^[A-ZÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ]/.test(w))) continue;
+
+    first_name = words[0];
+    last_name  = words[words.length - 1];
+    break;
+  }
+
+  return { first_name, last_name, email, linkedin_url };
+}
 
 /* ─── helpers ────────────────────────────────────────────────── */
 
@@ -44,6 +120,19 @@ function localDateStr(d) {
 // Returns a YYYY-MM-DD date string n business days from today
 function bizDaysFromNow(n) {
   const d = new Date();
+  let added = 0;
+  while (added < n) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) added++;
+  }
+  return localDateStr(d);
+}
+
+// Returns a YYYY-MM-DD date string n business days from a given YYYY-MM-DD start date
+function bizDaysFrom(startDateStr, n) {
+  const [year, month, day] = startDateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
   let added = 0;
   while (added < n) {
     d.setDate(d.getDate() + 1);
@@ -101,6 +190,15 @@ function setReqs(candidateId, reqIds) {
 
 /* ─── routes ─────────────────────────────────────────────────── */
 
+// POST /api/candidates/parse-resume — extract fields from a resume file (no disk write)
+router.post('/parse-resume', uploadMem.single('resume'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file received' });
+  const ext  = path.extname(req.file.originalname).toLowerCase();
+  const text = await extractText(req.file.buffer, ext);
+  if (!text.trim()) return res.json({});   // unreadable — return empty, no error
+  res.json(parseResumeText(text));
+});
+
 // GET /api/candidates/reminders — flat array; client groups into sections
 router.get('/reminders', (req, res) => {
   const rows = db.prepare(
@@ -118,17 +216,24 @@ router.get('/', (req, res) => {
   res.json(rows.map(parseRow));
 });
 
-// POST /api/candidates/:id/acknowledge — reset SLA clock + due date
+// POST /api/candidates/:id/acknowledge — log an activity, reset SLA clock
+// Body (all optional): { note: string, next_due: 'YYYY-MM-DD' }
 router.post('/:id/acknowledge', (req, res) => {
   const row = db.prepare('SELECT id FROM candidates WHERE id=?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
+
+  const { note, next_due } = req.body || {};
+  const dueDate = next_due || bizDaysFromNow(5);
+
   db.prepare(`
     UPDATE candidates
-    SET sla_reset_at=datetime('now'),
-        next_step_due=?,
-        updated_at=datetime('now')
-    WHERE id=?
-  `).run(bizDaysFromNow(5), req.params.id);
+    SET sla_reset_at  = datetime('now'),
+        next_step_due = ?,
+        next_step     = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE next_step END,
+        updated_at    = datetime('now')
+    WHERE id = ?
+  `).run(dueDate, note, note, note, req.params.id);
+
   res.json({ success: true });
 });
 
@@ -157,10 +262,24 @@ router.put('/:id/reqs', (req, res) => {
 // POST /api/candidates
 router.post('/', (req, res) => {
   const { first_name, last_name, email, stage_id,
-          linkedin_url, wd_url, notes, req_ids } = req.body;
+          linkedin_url, wd_url, notes, req_ids, hired_for_req_id,
+          contact_date } = req.body;
   if (!first_name || !stage_id) {
     return res.status(400).json({ error: 'first_name and stage_id are required' });
   }
+
+  const stage     = db.prepare('SELECT is_hire FROM stages WHERE id=?').get(stage_id);
+  const isHire    = !!stage?.is_hire;
+  const hireReqId = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
+
+  // If a past contact date is provided, back-date the SLA from that date
+  const validContactDate = contact_date && /^\d{4}-\d{2}-\d{2}$/.test(contact_date) ? contact_date : null;
+  const nextDue         = isHire ? null
+                        : validContactDate ? bizDaysFrom(validContactDate, 5)
+                        : bizDaysFromNow(5);
+  const stageEnteredAt  = validContactDate
+                        ? `${validContactDate}T00:00:00`
+                        : new Date().toISOString();
 
   const tx = db.transaction(() => {
     const composed = [first_name, last_name].filter(Boolean).join(' ');
@@ -168,8 +287,8 @@ router.post('/', (req, res) => {
       INSERT INTO candidates
         (name, first_name, last_name, email, stage_id,
          linkedin_url, wd_url, notes,
-         next_step_due, stage_entered_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         next_step_due, hired_for_req_id, stage_entered_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       composed,
       first_name,
@@ -179,9 +298,14 @@ router.post('/', (req, res) => {
       e(linkedin_url),
       e(wd_url),
       e(notes),
-      bizDaysFromNow(5)   // auto-set SLA deadline
+      nextDue,
+      hireReqId,
+      stageEnteredAt
     );
     const id = r.lastInsertRowid;
+    if (hireReqId) {
+      db.prepare("UPDATE reqs SET status='filled' WHERE id=?").run(hireReqId);
+    }
     setReqs(id, req_ids || []);
     return id;
   });
@@ -192,33 +316,53 @@ router.post('/', (req, res) => {
 // PUT /api/candidates/:id
 router.put('/:id', (req, res) => {
   const { first_name, last_name, email, stage_id,
-          linkedin_url, wd_url, notes, req_ids } = req.body;
+          linkedin_url, wd_url, notes, req_ids, hired_for_req_id } = req.body;
 
-  const existing = db.prepare('SELECT stage_id FROM candidates WHERE id=?').get(req.params.id);
+  const existing     = db.prepare('SELECT stage_id FROM candidates WHERE id=?').get(req.params.id);
   const stageChanged = existing && Number(existing.stage_id) !== Number(stage_id);
+
+  // Check whether the new stage is a "hire" stage
+  let isHire    = false;
+  let hireReqId = null;
+  if (stageChanged) {
+    const newStage = db.prepare('SELECT is_hire FROM stages WHERE id=?').get(stage_id);
+    isHire    = !!newStage?.is_hire;
+    hireReqId = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
+  }
 
   const tx = db.transaction(() => {
     const composed = [first_name, last_name].filter(Boolean).join(' ');
-    db.prepare(`
-      UPDATE candidates
-      SET name=?, first_name=?, last_name=?,
-          email=?, stage_id=?,
-          linkedin_url=?, wd_url=?, notes=?,
-          updated_at=datetime('now')
-          ${stageChanged
-            ? ", stage_entered_at=datetime('now'), sla_reset_at=NULL, next_step_due=?"
-            : ''}
-      WHERE id=?
-    `).run(
-      ...(stageChanged
-        ? [composed, first_name, e(last_name), e(email), stage_id,
-           e(linkedin_url), e(wd_url), e(notes),
-           bizDaysFromNow(5),           // auto-reset deadline on stage change
-           req.params.id]
-        : [composed, first_name, e(last_name), e(email), stage_id,
-           e(linkedin_url), e(wd_url), e(notes),
-           req.params.id])
-    );
+
+    // Build the UPDATE dynamically so we can handle three cases:
+    //   1. Stage didn't change     → just update fields
+    //   2. Stage → hire stage      → NULL out deadline, store hired_for_req_id, auto-fill req
+    //   3. Stage → non-hire stage  → reset SLA deadline, clear hired_for_req_id
+    let sql    = `UPDATE candidates SET name=?, first_name=?, last_name=?,
+                    email=?, stage_id=?, linkedin_url=?, wd_url=?, notes=?,
+                    updated_at=datetime('now')`;
+    const args = [composed, first_name, e(last_name), e(email), stage_id,
+                  e(linkedin_url), e(wd_url), e(notes)];
+
+    if (stageChanged) {
+      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL`;
+      if (isHire) {
+        sql += `, next_step_due=NULL, hired_for_req_id=?`;
+        args.push(hireReqId);
+      } else {
+        sql += `, next_step_due=?, hired_for_req_id=NULL`;
+        args.push(bizDaysFromNow(5));
+      }
+    }
+
+    sql += ` WHERE id=?`;
+    args.push(req.params.id);
+
+    db.prepare(sql).run(...args);
+
+    // Auto-fill the req when moving to a hire stage
+    if (stageChanged && isHire && hireReqId) {
+      db.prepare("UPDATE reqs SET status='filled' WHERE id=?").run(hireReqId);
+    }
 
     if (req_ids !== undefined) setReqs(req.params.id, req_ids);
   });

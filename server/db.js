@@ -11,7 +11,8 @@ db.exec(`
     name        TEXT    NOT NULL UNIQUE,
     order_index INTEGER NOT NULL,
     color       TEXT    DEFAULT '#6B7280',
-    is_terminal INTEGER DEFAULT 0
+    is_terminal INTEGER DEFAULT 0,
+    is_hire     INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS reqs (
@@ -55,8 +56,14 @@ db.exec(`
   'wd_url               TEXT',
   'resume_path          TEXT',
   'resume_original_name TEXT',
+  'hired_for_req_id     INTEGER',
 ].forEach(col => {
   try { db.exec(`ALTER TABLE candidates ADD COLUMN ${col}`); } catch (_) {}
+});
+
+// Stages migrations
+['is_hire INTEGER DEFAULT 0'].forEach(col => {
+  try { db.exec(`ALTER TABLE stages ADD COLUMN ${col}`); } catch (_) {}
 });
 
 // Back-fill first_name from name for any existing rows
@@ -70,16 +77,27 @@ db.exec(`
 const stageCount = db.prepare('SELECT COUNT(*) as c FROM stages').get().c;
 if (stageCount === 0) {
   const ins = db.prepare(
-    'INSERT INTO stages (name, order_index, color, is_terminal) VALUES (?, ?, ?, ?)'
+    'INSERT INTO stages (name, order_index, color, is_terminal, is_hire) VALUES (?, ?, ?, ?, ?)'
   );
   [
-    ['Applied',                  1, '#6B7280', 0],
-    ['Phone Screen',             2, '#3B82F6', 0],
-    ['Technical Interview',      3, '#8B5CF6', 0],
-    ['Onsite / Final Interview', 4, '#F59E0B', 0],
-    ['Offer',                    5, '#10B981', 0],
-    ['Rejected / Closed',        6, '#EF4444', 1],
+    // name,                     order, color,      terminal, hire
+    ['Applied',                  1, '#6B7280', 0, 0],
+    ['Phone Screen',             2, '#3B82F6', 0, 0],
+    ['Technical Interview',      3, '#8B5CF6', 0, 0],
+    ['Onsite / Final Interview', 4, '#F59E0B', 0, 0],
+    ['Offer',                    5, '#10B981', 0, 0],
+    ['Hired',                    6, '#22C55E', 1, 1],
+    ['Rejected / Closed',        7, '#EF4444', 1, 0],
   ].forEach(row => ins.run(...row));
+}
+
+// For existing databases: seed the "Hired" stage if it doesn't exist
+const hiredStage = db.prepare("SELECT id FROM stages WHERE is_hire = 1").get();
+if (!hiredStage) {
+  const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM stages').get().m || 0;
+  db.prepare(
+    'INSERT INTO stages (name, order_index, color, is_terminal, is_hire) VALUES (?, ?, ?, ?, ?)'
+  ).run('Hired', maxOrder + 1, '#22C55E', 1, 1);
 }
 
 module.exports = db;

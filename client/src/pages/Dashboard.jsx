@@ -3,8 +3,37 @@ import { api } from '../api';
 import { daysUntil, relativeLabel, localToday, calendarDaysFromToday } from '../utils/dates';
 import CandidateModal from '../components/CandidateModal';
 
+/* ── helpers for the log-activity date default ───────────────── */
+function bizDateStr(n) {
+  const d = new Date();
+  let added = 0;
+  while (added < n) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+  }
+  return d.toISOString().split('T')[0];
+}
+
 /* ── Candidate card ──────────────────────────────────────────── */
 function CandidateCard({ c, onEdit, onAcknowledge }) {
+  const [showLog, setShowLog] = useState(false);
+  const [note, setNote]       = useState('');
+  const [nextDue, setNextDue] = useState('');
+  const [saving, setSaving]   = useState(false);
+
+  const openLog = () => {
+    setNote('');
+    setNextDue(bizDateStr(5));
+    setShowLog(true);
+  };
+
+  const submit = async () => {
+    setSaving(true);
+    await onAcknowledge(c, { note: note.trim() || undefined, next_due: nextDue || undefined });
+    setSaving(false);
+    setShowLog(false);
+  };
+
   const d = daysUntil(c.next_step_due);
   const urgency =
     !c.next_step_due ? 'none'
@@ -51,6 +80,13 @@ function CandidateCard({ c, onEdit, onAcknowledge }) {
               </span>
             ))}
           </div>
+
+          {/* Last activity note */}
+          {c.next_step && (
+            <p className="mt-1 text-xs text-slate-500 italic truncate" title={c.next_step}>
+              ↳ {c.next_step}
+            </p>
+          )}
 
           {/* Profile links row */}
           {(c.email || c.linkedin_url || c.wd_url) && (
@@ -107,22 +143,72 @@ function CandidateCard({ c, onEdit, onAcknowledge }) {
               {relativeLabel(c.next_step_due)}
             </span>
           )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onAcknowledge(c)}
-              className="px-2.5 py-1.5 text-xs font-medium bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 text-green-700 transition-colors"
-            >
-              ✓ Mark Contacted
-            </button>
-            <button
-              onClick={() => onEdit(c)}
-              className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700 transition-colors shadow-sm"
-            >
-              Edit
-            </button>
-          </div>
+          {!showLog && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openLog}
+                className="px-2.5 py-1.5 text-xs font-medium bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 text-green-700 transition-colors"
+              >
+                ✓ Log Activity
+              </button>
+              <button
+                onClick={() => onEdit(c)}
+                className="px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-700 transition-colors shadow-sm"
+              >
+                Edit
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── Inline Log Activity form ─────────────────────────── */}
+      {showLog && (
+        <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              What did you do?
+            </label>
+            <input
+              autoFocus
+              type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') setShowLog(false); }}
+              placeholder={`e.g. Scheduled ${c.stage_name} for next week`}
+              className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+            />
+          </div>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Next check-in by
+              </label>
+              <input
+                type="date"
+                value={nextDue}
+                onChange={e => setNextDue(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              />
+            </div>
+            <div className="flex gap-2 pb-0.5">
+              <button
+                onClick={submit}
+                disabled={saving}
+                className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-60 transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={() => setShowLog(false)}
+                className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -185,8 +271,8 @@ export default function Dashboard() {
     load();
   };
 
-  const handleAcknowledge = async (c) => {
-    await api.acknowledgeCandidate(c.id);
+  const handleAcknowledge = async (c, data = {}) => {
+    await api.acknowledgeCandidate(c.id, data);
     load();
   };
 
