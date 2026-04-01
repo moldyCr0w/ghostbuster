@@ -288,7 +288,9 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
   const isHmReview = !!stage?.is_hm_review;
 
   useEffect(() => {
-    api.getVideoNotes(candidate.id).then(setVideoNotes);
+    api.getVideoNotes(candidate.id)
+      .then(data => setVideoNotes(Array.isArray(data) ? data : []))
+      .catch(() => setVideoNotes([]));
   }, [candidate.id]);
 
   const handleAddNote = async (e) => {
@@ -415,19 +417,7 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
             </div>
           )}
 
-          {/* Recruiter notes */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Recruiter Notes</p>
-            {candidate.notes ? (
-              <pre className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 border border-slate-100 rounded-lg p-4 font-sans leading-relaxed">
-                {candidate.notes}
-              </pre>
-            ) : (
-              <p className="text-sm text-slate-400 italic">No recruiter notes yet.</p>
-            )}
-          </div>
-
-          {/* Video screen notes */}
+          {/* Video screen notes — shown first so it's visible without scrolling */}
           <div>
             <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
               Video Screen Notes
@@ -444,7 +434,7 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
             ) : (
               <div className="space-y-3">
                 {videoNotes.map(vn => (
-                  <div key={vn.id} className="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                  <div key={vn.id} className="bg-purple-50 border border-purple-100 rounded-lg p-4">
                     <p className="text-xs text-slate-400 mb-1.5">
                       <span className="font-medium text-slate-600">{vn.author || 'Unknown'}</span>
                       {' · '}{fmtDate(vn.created_at)}
@@ -453,6 +443,18 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+
+          {/* Recruiter notes */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Recruiter Notes</p>
+            {candidate.notes ? (
+              <pre className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 border border-slate-100 rounded-lg p-4 font-sans leading-relaxed">
+                {candidate.notes}
+              </pre>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No recruiter notes yet.</p>
             )}
           </div>
 
