@@ -23,11 +23,13 @@ app.use('/api/reqs',          require('./routes/reqs'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/settings',      require('./routes/settings'));
 
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '..', 'client', 'dist')));
-  app.get('*', (_, res) =>
-    res.sendFile(path.join(__dirname, '..', 'client', 'dist', 'index.html'))
-  );
+// Serve the built React app whenever the dist folder exists.
+// Works in production (Railway) without requiring NODE_ENV to be set.
+// In local dev the dist folder is absent so Vite's dev server takes over.
+const DIST = path.join(__dirname, '..', 'client', 'dist');
+if (fs.existsSync(DIST)) {
+  app.use(express.static(DIST));
+  app.get('*', (_, res) => res.sendFile(path.join(DIST, 'index.html')));
 }
 
 const PORT = process.env.API_PORT || process.env.PORT || 3001;
