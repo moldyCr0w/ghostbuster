@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function fmtDate(iso) {
+  try {
+    return new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch { return iso; }
+}
+
 export default function CandidateModal({ candidate, stages, onSave, onClose }) {
+  const { user } = useAuth() || {};
+  const userName = user?.name || '';
   const defaultStageId = stages[0]?.id ?? '';
 
   const [form, setForm] = useState({
@@ -27,6 +36,21 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const [parsing, setParsing]         = useState(false);  // resume parsing in-flight
   const [parsedFields, setParsedFields] = useState([]);   // which fields were auto-filled
   const [saving, setSaving]           = useState(false);
+  const [submittingHm, setSubmittingHm] = useState(false);
+
+  // ── Video screen notes state ──
+  const [videoNotes, setVideoNotes]         = useState([]);
+  const [showVideoForm, setShowVideoForm]   = useState(false);
+  const [videoNote, setVideoNote]           = useState('');
+  const [videoAuthor, setVideoAuthor]       = useState(userName);
+  const [videoSaving, setVideoSaving]       = useState(false);
+
+  // ── Scorecard state ──
+  const [scorecardReqId, setScorecardReqId] = useState(null);
+  const [criteria, setCriteria]             = useState([]);
+  const [scores, setScores]                 = useState({}); // { criterion_id: score }
+  const [scoresSaving, setScoresSaving]     = useState(false);
+  const [scoresSaved, setScoresSaved]       = useState(false);
 
   useEffect(() => {
     if (candidate) {
@@ -45,6 +69,34 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   }, [candidate]); // eslint-disable-line
 
   useEffect(() => { api.getReqs().then(setReqs); }, []);
+
+  // Load video notes when editing
+  useEffect(() => {
+    if (candidate?.id) {
+      api.getVideoNotes(candidate.id).then(setVideoNotes);
+    }
+  }, [candidate?.id]);
+
+  // Load scorecard when editing and reqs are known
+  const loadScorecard = useCallback(async (reqId) => {
+    if (!candidate?.id || !reqId) { setCriteria([]); setScores({}); return; }
+    setScorecardReqId(reqId);
+    const [crit, sc] = await Promise.all([
+      api.getScorecard(reqId),
+      api.getCandidateScores(candidate.id, reqId),
+    ]);
+    setCriteria(crit);
+    const scoreMap = {};
+    sc.forEach(s => { if (s.score != null) scoreMap[s.criterion_id] = s.score; });
+    setScores(scoreMap);
+  }, [candidate?.id]);
+
+  // Auto-load scorecard for first linked req
+  useEffect(() => {
+    if (candidate && selectedIds.length > 0) {
+      loadScorecard(selectedIds[0]);
+    }
+  }, [candidate, selectedIds.length]); // eslint-disable-line
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
 
@@ -76,11 +128,64 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   };
 
   // Determine if the currently selected stage is a hire stage
-  const selectedStage = stages.find(s => s.id === Number(form.stage_id));
-  const isHireStage   = !!selectedStage?.is_hire;
+  const selectedStage  = stages.find(s => s.id === Number(form.stage_id));
+  const isHireStage    = !!selectedStage?.is_hire;
+
+  // HM Review stage — used for the "Submit for HM Review" button
+  const hmReviewStage   = stages.find(s => s.is_hm_review);
+  const alreadyHmReview = !!selectedStage?.is_hm_review;
+  const canSubmitHm     = !!candidate && !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
 
   // Reqs the candidate is linked to (for the "Filling Req" dropdown)
   const linkedReqs = reqs.filter(r => selectedIds.includes(r.id));
+
+  // ── Video note handlers ──
+  const handleAddVideoNote = async () => {
+    if (!videoNote.trim()) return;
+    setVideoSaving(true);
+    await api.addVideoNote(candidate.id, { note: videoNote, author: videoAuthor || null });
+    const updated = await api.getVideoNotes(candidate.id);
+    setVideoNotes(updated);
+    setVideoNote('');
+    setShowVideoForm(false);
+    setVideoSaving(false);
+  };
+
+  // ── Score handlers ──
+  const setScore = (criterionId, value) => {
+    setScores(prev => ({ ...prev, [criterionId]: value }));
+    setScoresSaved(false);
+  };
+
+  const handleSaveScores = async () => {
+    if (!scorecardReqId) return;
+    setScoresSaving(true);
+    const scoreArr = Object.entries(scores).map(([criterion_id, score]) => ({
+      criterion_id: Number(criterion_id), score,
+    }));
+    await api.saveCandidateScores(candidate.id, {
+      req_id: scorecardReqId,
+      scored_by: userName || null,
+      scores: scoreArr,
+    });
+    setScoresSaving(false);
+    setScoresSaved(true);
+  };
+
+  // Move candidate to HM Review stage (saves all current form data too)
+  const handleSubmitHmReview = async () => {
+    if (!hmReviewStage) return;
+    setSubmittingHm(true);
+    await onSave({
+      ...form,
+      stage_id:         hmReviewStage.id,
+      hired_for_req_id: null,
+      req_ids:          selectedIds,
+      _resumeFile:      resumeFile,
+      _removeResume:    removeResume,
+    });
+    setSubmittingHm(false);
+  };
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -101,6 +206,15 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
 
   const openReqs  = reqs.filter(r => r.status === 'open');
   const otherReqs = reqs.filter(r => r.status !== 'open');
+
+  // Scorecard: reqs that the candidate is linked to
+  const scorecardReqs = reqs.filter(r => selectedIds.includes(r.id));
+
+  // Average score
+  const scoredValues = Object.values(scores).filter(v => v >= 1 && v <= 5);
+  const avgScore = scoredValues.length > 0
+    ? (scoredValues.reduce((a, b) => a + b, 0) / scoredValues.length).toFixed(1)
+    : null;
 
   return (
     <div
@@ -307,6 +421,103 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
             </div>
           </div>
 
+          {/* ── Scorecard (edit mode only, when linked reqs have criteria) ── */}
+          {candidate && scorecardReqs.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Scorecard</label>
+              <div className="border border-slate-200 rounded-lg p-3 space-y-3">
+                {/* Req selector */}
+                {scorecardReqs.length > 1 && (() => {
+                  const activeReq = scorecardReqs.find(r => r.id === scorecardReqId);
+                  return (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={scorecardReqId || ''}
+                        onChange={e => loadScorecard(Number(e.target.value))}
+                        className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {scorecardReqs.map(r => (
+                          <option key={r.id} value={r.id}>{r.req_id} · {r.title}</option>
+                        ))}
+                      </select>
+                      {activeReq?.script_doc_url && (
+                        <a href={activeReq.script_doc_url} target="_blank" rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap">
+                          Open Scorecard ↗
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
+                {scorecardReqs.length === 1 && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500">
+                      <span className="font-mono font-semibold">{scorecardReqs[0].req_id}</span>
+                      {' · '}{scorecardReqs[0].title}
+                    </p>
+                    {scorecardReqs[0].script_doc_url && (
+                      <a href={scorecardReqs[0].script_doc_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                        Open Scorecard ↗
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {criteria.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">
+                    No scorecard criteria defined for this req. Add criteria on the Requisitions page.
+                  </p>
+                ) : (
+                  <>
+                    {criteria.map(c => (
+                      <div key={c.id} className="flex items-center gap-3">
+                        <span className="text-sm text-slate-700 flex-1">{c.name}</span>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setScore(c.id, n)}
+                              className={`w-7 h-7 rounded text-xs font-semibold transition-colors ${
+                                scores[c.id] === n
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                              }`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div className="text-xs text-slate-500">
+                        {avgScore ? (
+                          <>Average: <span className="font-semibold text-slate-700">{avgScore}</span> / 5</>
+                        ) : (
+                          <span className="italic">No scores yet</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {scoresSaved && <span className="text-xs text-green-600">Saved</span>}
+                        <button
+                          type="button"
+                          onClick={handleSaveScores}
+                          disabled={scoresSaving || scoredValues.length === 0}
+                          className="px-3 py-1 text-xs bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          {scoresSaving ? 'Saving…' : 'Save Scores'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Resume */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Resume</label>
@@ -394,24 +605,119 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
+
+          {/* ── Video Screen Notes (edit mode only) ── */}
+          {candidate && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Video Screen Notes
+                {videoNotes.length > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-normal">
+                    {videoNotes.length}
+                  </span>
+                )}
+              </label>
+
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                {/* Existing notes */}
+                {videoNotes.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                    {videoNotes.map(vn => (
+                      <div key={vn.id} className="px-3 py-2">
+                        <p className="text-xs font-semibold text-slate-500 mb-0.5">
+                          {vn.author || 'Unknown'} · {fmtDate(vn.created_at)}
+                        </p>
+                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{vn.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {videoNotes.length === 0 && !showVideoForm && (
+                  <p className="px-3 py-3 text-xs text-slate-400 italic">
+                    No video screen notes yet.
+                  </p>
+                )}
+
+                {/* Add note form */}
+                {showVideoForm ? (
+                  <div className="px-3 py-3 bg-slate-50 border-t border-slate-100 space-y-2">
+                    <input
+                      value={videoAuthor}
+                      onChange={e => setVideoAuthor(e.target.value)}
+                      placeholder="Your name"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <textarea
+                      autoFocus
+                      rows={3}
+                      value={videoNote}
+                      onChange={e => setVideoNote(e.target.value)}
+                      placeholder="Notes from the video screen…"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleAddVideoNote}
+                        disabled={videoSaving || !videoNote.trim()}
+                        className="px-3 py-1.5 text-xs bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                      >
+                        {videoSaving ? 'Saving…' : 'Save Note'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowVideoForm(false); setVideoNote(''); }}
+                        className="px-3 py-1.5 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowVideoForm(true)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      + Add Video Screen Note
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </form>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
-          <button
-            onClick={handleSubmit}
-            disabled={saving}
-            className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : candidate ? 'Save Changes' : 'Add Candidate'}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="px-6 py-4 border-t border-slate-100 space-y-2">
+          <div className="flex gap-3">
+            <button
+              onClick={handleSubmit}
+              disabled={saving || submittingHm}
+              className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : candidate ? 'Save Changes' : 'Add Candidate'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+          {canSubmitHm && (
+            <button
+              type="button"
+              onClick={handleSubmitHmReview}
+              disabled={saving || submittingHm}
+              className="w-full py-2.5 bg-orange-500 text-white text-sm font-semibold rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {submittingHm ? 'Submitting…' : '🔍 Submit for HM Review'}
+            </button>
+          )}
         </div>
       </div>
     </div>

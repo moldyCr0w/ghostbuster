@@ -1,17 +1,142 @@
-import React from 'react';
-import { Routes, Route, NavLink } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { api } from './api';
 import Dashboard  from './pages/Dashboard';
 import Candidates from './pages/Candidates';
 import Reqs       from './pages/Reqs';
 import Pipeline   from './pages/Pipeline';
+import Board      from './pages/Board';
 import Settings   from './pages/Settings';
+import Login      from './pages/Login';
+import HMView     from './pages/HMView';
 
+/* ── Notification bell (sidebar) ─────────────────────────────── */
+function NotificationBell() {
+  const [notifications, setNotifications] = useState([]);
+  const [open, setOpen]                   = useState(false);
+
+  const load = useCallback(async () => {
+    const data = await api.getNotifications();
+    setNotifications(Array.isArray(data) ? data : []);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const unread = notifications.filter(n => !n.is_read).length;
+
+  const handleToggle = () => {
+    setOpen(o => !o);
+    if (!open) load(); // refresh list on open
+  };
+
+  const handleMarkOne = async (id) => {
+    await api.markRead(id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n));
+  };
+
+  const handleMarkAll = async () => {
+    await api.markAllRead();
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+  };
+
+  function fmtShort(iso) {
+    try {
+      return new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return iso; }
+  }
+
+  return (
+    <div>
+      <button
+        onClick={handleToggle}
+        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+          open
+            ? 'bg-slate-800 text-white'
+            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+        }`}
+      >
+        <span>🔔</span>
+        <span>Notifications</span>
+        {unread > 0 && (
+          <span className="ml-auto px-1.5 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full min-w-[1.25rem] text-center leading-none">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-1 bg-slate-800 rounded-lg overflow-hidden">
+          {notifications.length === 0 ? (
+            <p className="px-4 py-3 text-xs text-slate-400 italic">No HM decisions yet.</p>
+          ) : (
+            <>
+              {unread > 0 && (
+                <button
+                  onClick={handleMarkAll}
+                  className="w-full text-left px-4 py-2 text-xs text-slate-400 hover:text-white border-b border-slate-700 transition-colors"
+                >
+                  ✓ Mark all as read
+                </button>
+              )}
+              <div className="max-h-72 overflow-y-auto divide-y divide-slate-700">
+                {notifications.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => !n.is_read && handleMarkOne(n.id)}
+                    className={`px-4 py-3 flex items-start gap-2.5 ${
+                      n.is_read
+                        ? 'opacity-50'
+                        : 'hover:bg-slate-700 cursor-pointer'
+                    }`}
+                  >
+                    <span className="text-base shrink-0 mt-0.5">
+                      {n.decision === 'forward' ? '✅' : '❌'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-white leading-tight truncate">
+                        {n.candidate_name}
+                      </p>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        {n.decision === 'forward'
+                          ? `Forwarded → ${n.stage_name || 'next stage'}`
+                          : 'Declined by HM'}
+                        {n.req_title ? ` · ${n.req_title}` : ''}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {fmtShort(n.created_at)}
+                      </p>
+                    </div>
+                    {!n.is_read && (
+                      <span className="shrink-0 w-2 h-2 rounded-full bg-blue-400 mt-1.5" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Nav link style ──────────────────────────────────────────── */
 const navItem = ({ isActive }) =>
   `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
     isActive ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
   }`;
 
-export default function App() {
+/* ── Authenticated shell (sidebar + page content) ────────────── */
+function AppShell() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Sidebar */}
@@ -25,13 +150,31 @@ export default function App() {
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           <NavLink to="/"           end className={navItem}>📊 Dashboard</NavLink>
           <NavLink to="/pipeline"       className={navItem}>🔀 Pipeline</NavLink>
+          <NavLink to="/board"          className={navItem}>🗂️ Board</NavLink>
           <NavLink to="/candidates"     className={navItem}>👥 Candidates</NavLink>
           <NavLink to="/reqs"           className={navItem}>📋 Requisitions</NavLink>
           <NavLink to="/settings"       className={navItem}>⚙️ Settings</NavLink>
+          <div className="pt-1">
+            <NotificationBell />
+          </div>
         </nav>
+
+        {/* Logged-in user footer */}
+        {user && (
+          <div className="px-4 py-4 border-t border-slate-800">
+            <p className="text-xs font-medium text-slate-300 truncate">{user.name}</p>
+            <p className="text-xs text-slate-500 truncate mb-2">{user.email}</p>
+            <button
+              onClick={handleLogout}
+              className="text-xs text-slate-400 hover:text-white transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Page content */}
@@ -39,11 +182,52 @@ export default function App() {
         <Routes>
           <Route path="/"           element={<Dashboard />}  />
           <Route path="/pipeline"   element={<Pipeline />}   />
+          <Route path="/board"      element={<Board />}      />
           <Route path="/candidates" element={<Candidates />} />
           <Route path="/reqs"       element={<Reqs />}       />
           <Route path="/settings"   element={<Settings />}   />
+          <Route path="*"           element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
+  );
+}
+
+/* ── Guard: redirect to /login when auth is required ─────────── */
+function RequireAuth({ children }) {
+  const { user, requiresAuth } = useAuth();
+
+  // Still loading — render nothing to avoid a flash
+  if (user === undefined) return null;
+
+  // No users in DB yet → open access (first-run mode)
+  if (!requiresAuth) return children;
+
+  // Auth required but not logged in → send to login
+  if (!user) return <Navigate to="/login" replace />;
+
+  return children;
+}
+
+/* ── Root ────────────────────────────────────────────────────── */
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/hm"    element={<HMView />} />
+
+        {/* Everything else is protected */}
+        <Route
+          path="/*"
+          element={
+            <RequireAuth>
+              <AppShell />
+            </RequireAuth>
+          }
+        />
+      </Routes>
+    </AuthProvider>
   );
 }

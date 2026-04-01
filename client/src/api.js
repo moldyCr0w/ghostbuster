@@ -31,6 +31,18 @@ export const api = {
     return fetch(`${BASE}/candidates/parse-resume`, { method: 'POST', body: fd }).then(r => r.json());
   },
 
+  // HM view — append a note without a login session
+  addHmNote: (id, note, author) => req(`/candidates/${id}/hm-note`, {
+    method: 'PATCH',
+    body: JSON.stringify({ note, author }),
+  }),
+
+  // HM view — forward or decline a candidate (no auth required)
+  hmDecision: (id, decision) => req(`/candidates/${id}/hm-decision`, {
+    method: 'PATCH',
+    body: JSON.stringify({ decision }),
+  }),
+
   // Candidate ↔ Req junction
   getCandidateReqs:   (cid)     => req(`/candidates/${cid}/reqs`),
   setCandidateReqs:   (cid, ids)=> req(`/candidates/${cid}/reqs`, { method: 'PUT', body: JSON.stringify({ req_ids: ids }) }),
@@ -41,9 +53,34 @@ export const api = {
   updateStage: (id, data)=> req(`/stages/${id}`,{ method: 'PUT',  body: JSON.stringify(data) }),
   deleteStage: (id)      => req(`/stages/${id}`,{ method: 'DELETE' }),
 
+  // ── Video screen notes ──────────────────────────────────────
+  getVideoNotes:  (candId)       => req(`/candidates/${candId}/video-notes`),
+  addVideoNote:   (candId, data) => req(`/candidates/${candId}/video-notes`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ── Candidate scores ──────────────────────────────────────
+  getCandidateScores: (candId, reqId) => req(`/candidates/${candId}/scores?req_id=${reqId}`),
+  saveCandidateScores:(candId, data)  => req(`/candidates/${candId}/scores`, { method: 'PUT', body: JSON.stringify(data) }),
+
   // ── Requisitions ─────────────────────────────────────────────
   getReqs:    ()        => req('/reqs'),
   createReq:  (data)    => req('/reqs',      { method: 'POST', body: JSON.stringify(data) }),
   updateReq:  (id, data)=> req(`/reqs/${id}`,{ method: 'PUT',  body: JSON.stringify(data) }),
   deleteReq:  (id)      => req(`/reqs/${id}`,{ method: 'DELETE' }),
+
+  // ── Scorecard criteria ─────────────────────────────────────
+  getScorecard:     (reqId)            => req(`/reqs/${reqId}/scorecard`),
+  addCriterion:     (reqId, data)      => req(`/reqs/${reqId}/scorecard`, { method: 'POST', body: JSON.stringify(data) }),
+  updateCriterion:  (reqId, cid, data) => req(`/reqs/${reqId}/scorecard/${cid}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCriterion:  (reqId, cid)       => req(`/reqs/${reqId}/scorecard/${cid}`, { method: 'DELETE' }),
+
+  // ── Users (admin) ────────────────────────────────────────────
+  getUsers:    ()        => req('/users'),
+  createUser:  (data)    => req('/users',      { method: 'POST',   body: JSON.stringify(data) }),
+  deleteUser:  (id)      => req(`/users/${id}`,{ method: 'DELETE' }),
+
+  // ── Notifications ─────────────────────────────────────────────
+  getNotifications:  ()    => req('/notifications'),
+  getUnreadCount:    ()    => req('/notifications/unread-count'),
+  markRead:          (id)  => req(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead:       ()    => req('/notifications/read-all',   { method: 'PATCH' }),
 };

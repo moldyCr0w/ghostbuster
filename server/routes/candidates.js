@@ -162,6 +162,7 @@ const WITH_STAGE = `
          s.color       as stage_color,
          s.order_index,
          s.is_terminal,
+         s.is_hm_review,
          ${REQS_SUB}   as reqs_json
   FROM   candidates c
   JOIN   stages s ON c.stage_id = s.id
@@ -371,6 +372,98 @@ router.put('/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// PATCH /api/candidates/:id/hm-note — append a note from the HM view (no auth required)
+router.patch('/:id/hm-note', (req, res) => {
+  const row = db.prepare('SELECT id, notes FROM candidates WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  const { note, author } = req.body || {};
+  if (!note?.trim()) return res.status(400).json({ error: 'Note cannot be empty' });
+
+  const stamp   = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  const header  = `\n\n— ${author?.trim() || 'Hiring Manager'} (${stamp}) —\n`;
+  const updated = (row.notes || '').trimEnd() + header + note.trim();
+
+  db.prepare("UPDATE candidates SET notes=?, updated_at=datetime('now') WHERE id=?")
+    .run(updated, req.params.id);
+
+  res.json({ success: true });
+});
+
+// PATCH /api/candidates/:id/hm-decision — HM forwards or declines (no auth required)
+// Body: { decision: 'forward' | 'decline' }
+router.patch('/:id/hm-decision', (req, res) => {
+  const { decision } = req.body || {};
+  if (decision !== 'forward' && decision !== 'decline') {
+    return res.status(400).json({ error: 'decision must be "forward" or "decline"' });
+  }
+
+  const candidate = db.prepare('SELECT id FROM candidates WHERE id=?').get(req.params.id);
+  if (!candidate) return res.status(404).json({ error: 'Not found' });
+
+  let targetStage;
+  if (decision === 'forward') {
+    // Find the next non-hm_review, non-terminal stage after the HM Review stage
+    const hmStage = db.prepare('SELECT order_index FROM stages WHERE is_hm_review = 1').get();
+    targetStage = db.prepare(`
+      SELECT id, is_terminal FROM stages
+      WHERE order_index > ? AND is_terminal = 0 AND is_hm_review = 0
+      ORDER BY order_index ASC LIMIT 1
+    `).get(hmStage?.order_index ?? 0);
+  } else {
+    // Decline: move to the terminal non-hire stage (e.g. "Rejected / Closed")
+    targetStage = db.prepare(`
+      SELECT id, is_terminal FROM stages
+      WHERE is_terminal = 1 AND is_hire = 0
+      ORDER BY order_index ASC LIMIT 1
+    `).get();
+  }
+
+  if (!targetStage) {
+    return res.status(500).json({ error: 'Target stage not found — check your stage configuration' });
+  }
+
+  const nextDue = targetStage.is_terminal ? null : bizDaysFromNow(5);
+
+  db.prepare(`
+    UPDATE candidates
+    SET stage_id = ?, stage_entered_at = datetime('now'),
+        sla_reset_at = NULL, next_step_due = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(targetStage.id, nextDue, req.params.id);
+
+  // Log a notification for recruiters
+  try {
+    const cInfo = db.prepare(
+      'SELECT first_name, last_name, name FROM candidates WHERE id=?'
+    ).get(req.params.id);
+    const candName = [cInfo?.first_name, cInfo?.last_name].filter(Boolean).join(' ')
+      || cInfo?.name || 'Unknown';
+
+    const linkedReq = db.prepare(`
+      SELECT r.title FROM reqs r
+      JOIN candidate_reqs cr ON cr.req_id = r.id
+      WHERE cr.candidate_id = ? LIMIT 1
+    `).get(req.params.id);
+
+    const stageName = db.prepare('SELECT name FROM stages WHERE id=?').get(targetStage.id)?.name;
+
+    db.prepare(`
+      INSERT INTO notifications (type, candidate_id, candidate_name, req_title, stage_name, decision)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      decision === 'forward' ? 'hm_forward' : 'hm_decline',
+      req.params.id,
+      candName,
+      linkedReq?.title || null,
+      stageName || null,
+      decision
+    );
+  } catch (_) { /* notifications are best-effort — never block the response */ }
+
+  res.json({ success: true, stage_id: targetStage.id });
+});
+
 // DELETE /api/candidates/:id
 router.delete('/:id', (req, res) => {
   // Clean up resume file if present
@@ -417,6 +510,78 @@ router.delete('/:id/resume', (req, res) => {
     WHERE id=?
   `).run(req.params.id);
 
+  res.json({ success: true });
+});
+
+/* ─── video screen notes ────────────────────────────────────── */
+
+// GET /api/candidates/:id/video-notes
+router.get('/:id/video-notes', (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM video_screen_notes WHERE candidate_id = ? ORDER BY created_at DESC'
+  ).all(req.params.id);
+  res.json(rows);
+});
+
+// POST /api/candidates/:id/video-notes
+router.post('/:id/video-notes', (req, res) => {
+  const row = db.prepare('SELECT id FROM candidates WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  const { note, author } = req.body;
+  if (!note?.trim()) return res.status(400).json({ error: 'note is required' });
+
+  const r = db.prepare(
+    'INSERT INTO video_screen_notes (candidate_id, note, author) VALUES (?, ?, ?)'
+  ).run(req.params.id, note.trim(), author?.trim() || null);
+
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+/* ─── candidate scores ──────────────────────────────────────── */
+
+// GET /api/candidates/:id/scores?req_id=
+router.get('/:id/scores', (req, res) => {
+  const { req_id } = req.query;
+  if (!req_id) return res.status(400).json({ error: 'req_id query parameter is required' });
+
+  const rows = db.prepare(`
+    SELECT sc.id as criterion_id, sc.name as criterion_name, sc.order_index,
+           cs.score, cs.scored_by, cs.scored_at
+    FROM   scorecard_criteria sc
+    LEFT JOIN candidate_scores cs
+      ON cs.criterion_id = sc.id
+      AND cs.candidate_id = ?
+      AND cs.req_id = ?
+    WHERE sc.req_id = ?
+    ORDER BY sc.order_index, sc.id
+  `).all(req.params.id, req_id, req_id);
+
+  res.json(rows);
+});
+
+// PUT /api/candidates/:id/scores
+router.put('/:id/scores', (req, res) => {
+  const { req_id, scores, scored_by } = req.body;
+  if (!req_id || !Array.isArray(scores)) {
+    return res.status(400).json({ error: 'req_id and scores array are required' });
+  }
+
+  const upsert = db.prepare(`
+    INSERT INTO candidate_scores (candidate_id, req_id, criterion_id, score, scored_by, scored_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(candidate_id, req_id, criterion_id)
+    DO UPDATE SET score = excluded.score, scored_by = excluded.scored_by, scored_at = datetime('now')
+  `);
+
+  const tx = db.transaction(() => {
+    for (const { criterion_id, score } of scores) {
+      if (score >= 1 && score <= 5) {
+        upsert.run(req.params.id, req_id, criterion_id, score, scored_by || null);
+      }
+    }
+  });
+  tx();
   res.json({ success: true });
 });
 

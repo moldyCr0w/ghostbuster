@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 
 const STATUS_STYLES = {
@@ -8,7 +8,7 @@ const STATUS_STYLES = {
 };
 const STATUS_LABELS = { open: 'Open', on_hold: 'On Hold', closed: 'Closed' };
 
-const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open' };
+const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', hiring_manager: '', recruiter: '', script_doc_url: '' };
 
 export default function Reqs() {
   const [reqs, setReqs]         = useState([]);
@@ -46,7 +46,7 @@ export default function Reqs() {
 
   const startEdit = (r) => {
     setEditId(r.id);
-    setEditForm({ req_id: r.req_id, title: r.title, department: r.department || '', status: r.status });
+    setEditForm({ req_id: r.req_id, title: r.title, department: r.department || '', status: r.status, hiring_manager: r.hiring_manager || '', recruiter: r.recruiter || '', script_doc_url: r.script_doc_url || '' });
   };
 
   const saveEdit = async (r) => {
@@ -66,7 +66,7 @@ export default function Reqs() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
+    <div className="p-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-800">Requisitions</h1>
@@ -87,12 +87,13 @@ export default function Reqs() {
             No requisitions yet — add one below.
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Req ID</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Req ID</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Title</th>
-                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Department</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Department</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Candidates</th>
                 <th className="px-4 py-3"></th>
@@ -101,102 +102,130 @@ export default function Reqs() {
             <tbody className="divide-y divide-slate-100">
               {reqs.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  {editId === r.id ? (
-                    /* ── edit row ── */
-                    <td colSpan={6} className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2 items-end">
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">Req ID</label>
-                          <input
-                            autoFocus
-                            value={editForm.req_id}
-                            onChange={setEdit('req_id')}
-                            className="w-28 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-40">
-                          <label className="block text-xs text-slate-500 mb-1">Title</label>
-                          <input
-                            value={editForm.title}
-                            onChange={setEdit('title')}
-                            className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">Department</label>
-                          <input
-                            value={editForm.department}
-                            onChange={setEdit('department')}
-                            className="w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">Status</label>
-                          <select
-                            value={editForm.status}
-                            onChange={setEdit('status')}
-                            className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="open">Open</option>
-                            <option value="on_hold">On Hold</option>
-                            <option value="closed">Closed</option>
-                          </select>
-                        </div>
-                        <div className="flex gap-2 pb-0.5">
-                          <button
-                            onClick={() => saveEdit(r)}
-                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditId(null)}
-                            className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </td>
-                  ) : (
-                    /* ── display row ── */
-                    <>
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{r.req_id}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{r.title}</td>
-                      <td className="px-4 py-3 text-slate-500">{r.department || <span className="text-slate-300">—</span>}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>
-                          {STATUS_LABELS[r.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">
-                        {r.candidate_count > 0
-                          ? <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full">{r.candidate_count}</span>
-                          : <span className="text-slate-300">0</span>
-                        }
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 justify-end">
-                          <button
-                            onClick={() => startEdit(r)}
-                            className="px-3 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(r)}
-                            className="px-3 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
-                          >
-                            Delete
-                          </button>
+                    {editId === r.id ? (
+                      /* ── edit row ── */
+                      <td colSpan={6} className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2 items-end">
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Req ID</label>
+                            <input
+                              autoFocus
+                              value={editForm.req_id}
+                              onChange={setEdit('req_id')}
+                              className="w-28 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-40">
+                            <label className="block text-xs text-slate-500 mb-1">Title</label>
+                            <input
+                              value={editForm.title}
+                              onChange={setEdit('title')}
+                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Department</label>
+                            <input
+                              value={editForm.department}
+                              onChange={setEdit('department')}
+                              className="w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Hiring Manager</label>
+                            <input
+                              value={editForm.hiring_manager}
+                              onChange={setEdit('hiring_manager')}
+                              placeholder="First Last"
+                              className="w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Recruiter</label>
+                            <input
+                              value={editForm.recruiter}
+                              onChange={setEdit('recruiter')}
+                              placeholder="First Last"
+                              className="w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Status</label>
+                            <select
+                              value={editForm.status}
+                              onChange={setEdit('status')}
+                              className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="open">Open</option>
+                              <option value="on_hold">On Hold</option>
+                              <option value="closed">Closed</option>
+                            </select>
+                          </div>
+                          <div className="flex-1 min-w-48">
+                            <label className="block text-xs text-slate-500 mb-1">Scorecard</label>
+                            <input
+                              value={editForm.script_doc_url}
+                              onChange={setEdit('script_doc_url')}
+                              placeholder="https://docs.google.com/..."
+                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex gap-2 pb-0.5">
+                            <button
+                              onClick={() => saveEdit(r)}
+                              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditId(null)}
+                              className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
                       </td>
-                    </>
-                  )}
-                </tr>
+                    ) : (
+                      /* ── display row ── */
+                      <>
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{r.req_id}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{r.title}</td>
+                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{r.department || <span className="text-slate-300">—</span>}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>
+                            {STATUS_LABELS[r.status]}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">
+                          {r.candidate_count > 0
+                            ? <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full">{r.candidate_count}</span>
+                            : <span className="text-slate-300">0</span>
+                          }
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 justify-end">
+                            <button
+                              onClick={() => startEdit(r)}
+                              className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(r)}
+                              className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
+                  </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -235,6 +264,33 @@ export default function Reqs() {
               onChange={set('department')}
               placeholder="Engineering"
               className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Hiring Manager</label>
+            <input
+              value={form.hiring_manager}
+              onChange={set('hiring_manager')}
+              placeholder="First Last"
+              className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Recruiter</label>
+            <input
+              value={form.recruiter}
+              onChange={set('recruiter')}
+              placeholder="First Last"
+              className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex-1 min-w-48">
+            <label className="block text-xs text-slate-500 mb-1">Scorecard</label>
+            <input
+              value={form.script_doc_url}
+              onChange={set('script_doc_url')}
+              placeholder="https://docs.google.com/…"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>

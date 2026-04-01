@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { localToday } from '../utils/dates';
+import { useAuth } from '../context/AuthContext';
 
 /* ── Status badge for a req ──────────────────────────────────── */
 const STATUS_STYLES = {
@@ -19,26 +20,57 @@ function StatusBadge({ status }) {
   );
 }
 
-/* ── Stage pill showing count ────────────────────────────────── */
-function StagePill({ stage, count, overdueCount, isTerminal }) {
+/* ── Proportional bar segment (count only, no label) ─────────── */
+function StageBarSegment({ stage, count, overdueCount, isTerminal }) {
   return (
     <div
-      className={`flex flex-col items-center px-3 py-2 rounded-lg border text-center min-w-[90px] ${
+      className={`flex items-center justify-center py-2 rounded border overflow-hidden ${
         isTerminal ? 'opacity-50' : ''
       }`}
-      style={{ borderColor: stage.color + '60', backgroundColor: stage.color + '15' }}
+      style={{
+        flex: count,
+        minWidth: 0,
+        borderColor: stage.color + '60',
+        backgroundColor: stage.color + '15',
+      }}
+      title={`${stage.name}: ${count}`}
     >
       <span
-        className="text-xl font-bold leading-none"
+        className="text-base font-bold leading-none"
         style={{ color: isTerminal ? '#94a3b8' : stage.color }}
       >
         {count}
+        {overdueCount > 0 && (
+          <span className="ml-0.5 text-red-500 text-xs">!</span>
+        )}
       </span>
-      <span className="text-xs mt-1 leading-tight text-slate-600 font-medium">{stage.name}</span>
+    </div>
+  );
+}
+
+/* ── Legend chip (full name, always readable) ─────────────────── */
+function StageLegendChip({ stage, count, overdueCount, isTerminal }) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap ${
+        isTerminal ? 'opacity-50' : ''
+      }`}
+      style={{
+        borderColor: stage.color + '50',
+        backgroundColor: stage.color + '12',
+        color: '#374151',
+      }}
+    >
+      <span
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: isTerminal ? '#94a3b8' : stage.color }}
+      />
+      {stage.name}
+      <span className="font-bold ml-0.5" style={{ color: isTerminal ? '#94a3b8' : stage.color }}>
+        {count}
+      </span>
       {overdueCount > 0 && (
-        <span className="mt-1 text-xs text-red-600 font-semibold">
-          {overdueCount} overdue
-        </span>
+        <span className="text-red-600 font-semibold">· {overdueCount} overdue</span>
       )}
     </div>
   );
@@ -100,18 +132,33 @@ function ReqCard({ req, stages, candidatesForReq }) {
         </div>
       </div>
 
-      {/* Stage pills */}
+      {/* Stage visualisation: proportional bar + readable legend */}
       {visibleStages.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {visibleStages.map(s => (
-            <StagePill
-              key={s.id}
-              stage={s}
-              count={stageMap[s.id]?.count || 0}
-              overdueCount={stageMap[s.id]?.overdueCount || 0}
-              isTerminal={s.is_terminal}
-            />
-          ))}
+        <div className="space-y-2">
+          {/* Proportional bar — width reflects candidate count */}
+          <div className="flex gap-1">
+            {visibleStages.map(s => (
+              <StageBarSegment
+                key={s.id}
+                stage={s}
+                count={stageMap[s.id]?.count || 0}
+                overdueCount={stageMap[s.id]?.overdueCount || 0}
+                isTerminal={s.is_terminal}
+              />
+            ))}
+          </div>
+          {/* Legend — full stage names, always readable */}
+          <div className="flex flex-wrap gap-1.5">
+            {visibleStages.map(s => (
+              <StageLegendChip
+                key={s.id}
+                stage={s}
+                count={stageMap[s.id]?.count || 0}
+                overdueCount={stageMap[s.id]?.overdueCount || 0}
+                isTerminal={s.is_terminal}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <p className="text-slate-400 text-sm italic">No candidates linked yet.</p>
@@ -122,11 +169,15 @@ function ReqCard({ req, stages, candidatesForReq }) {
 
 /* ── Pipeline page ───────────────────────────────────────────── */
 export default function Pipeline() {
+  const { user }                    = useAuth();
   const [reqs, setReqs]             = useState([]);
   const [stages, setStages]         = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [filter, setFilter]         = useState('active'); // 'all' | 'active' | 'open'
+  const [hmFilter, setHmFilter]             = useState('');
+  // Pre-seed recruiter filter with the logged-in user's name (they can clear it)
+  const [recruiterFilter, setRecruiterFilter] = useState(() => user?.name || '');
 
   const load = useCallback(async () => {
     const [r, s, c] = await Promise.all([
@@ -164,11 +215,19 @@ export default function Pipeline() {
   // Unassigned candidates (no reqs linked)
   const unassigned = candidates.filter(c => !c.reqs || c.reqs.length === 0);
 
-  // Filter reqs
-  const filteredReqs =
-    filter === 'open'   ? reqs.filter(r => r.status === 'open') :
-    filter === 'active' ? reqs.filter(r => r.status !== 'closed' && r.status !== 'filled') :
-    reqs;
+  // Unique hiring managers + recruiters (sorted, ignoring blanks)
+  const hiringManagers = [...new Set(reqs.map(r => r.hiring_manager).filter(Boolean))].sort();
+  const recruiters     = [...new Set(reqs.map(r => r.recruiter).filter(Boolean))].sort();
+
+  // Filter reqs — status → HM → recruiter
+  const filteredReqs = reqs
+    .filter(r =>
+      filter === 'open'   ? r.status === 'open' :
+      filter === 'active' ? r.status !== 'closed' && r.status !== 'filled' :
+      true
+    )
+    .filter(r => !hmFilter         || r.hiring_manager === hmFilter)
+    .filter(r => !recruiterFilter  || r.recruiter      === recruiterFilter);
 
   // Summary stats
   const today       = localToday();
@@ -208,8 +267,9 @@ export default function Pipeline() {
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-5">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        {/* Status tabs */}
         {[
           { key: 'active', label: 'Active Reqs' },
           { key: 'open',   label: 'Open Only' },
@@ -227,6 +287,71 @@ export default function Pipeline() {
             {opt.label}
           </button>
         ))}
+
+        {/* Person filters — pushed to the right, only shown when data exists */}
+        {(hiringManagers.length > 0 || recruiters.length > 0) && (
+          <div className="ml-auto flex items-center gap-3">
+
+            {hiringManagers.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-slate-400 whitespace-nowrap">Hiring Manager</label>
+                <select
+                  value={hmFilter}
+                  onChange={e => setHmFilter(e.target.value)}
+                  className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    hmFilter
+                      ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <option value="">All</option>
+                  {hiringManagers.map(hm => (
+                    <option key={hm} value={hm}>{hm}</option>
+                  ))}
+                </select>
+                {hmFilter && (
+                  <button
+                    onClick={() => setHmFilter('')}
+                    className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                    title="Clear filter"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {recruiters.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-slate-400 whitespace-nowrap">Recruiter</label>
+                <select
+                  value={recruiterFilter}
+                  onChange={e => setRecruiterFilter(e.target.value)}
+                  className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    recruiterFilter
+                      ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <option value="">All</option>
+                  {recruiters.map(r => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                {recruiterFilter && (
+                  <button
+                    onClick={() => setRecruiterFilter('')}
+                    className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                    title="Clear filter"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+          </div>
+        )}
       </div>
 
       {/* Req cards */}
@@ -254,20 +379,30 @@ export default function Pipeline() {
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
             ⚠️ Unassigned — not linked to any req ({unassigned.length})
           </h2>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                const stageMap = {};
-                for (const c of unassigned) {
-                  const key = c.stage_id;
-                  if (!stageMap[key]) stageMap[key] = { stage: { id: c.stage_id, name: c.stage_name, color: c.stage_color, is_terminal: c.is_terminal }, count: 0 };
-                  stageMap[key].count++;
-                }
-                return Object.values(stageMap).map(({ stage, count }) => (
-                  <StagePill key={stage.id} stage={stage} count={count} overdueCount={0} isTerminal={stage.is_terminal} />
-                ));
-              })()}
-            </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+            {(() => {
+              const stageMap = {};
+              for (const c of unassigned) {
+                const key = c.stage_id;
+                if (!stageMap[key]) stageMap[key] = { stage: { id: c.stage_id, name: c.stage_name, color: c.stage_color, is_terminal: c.is_terminal }, count: 0 };
+                stageMap[key].count++;
+              }
+              const entries = Object.values(stageMap);
+              return (
+                <>
+                  <div className="flex gap-1">
+                    {entries.map(({ stage, count }) => (
+                      <StageBarSegment key={stage.id} stage={stage} count={count} overdueCount={0} isTerminal={stage.is_terminal} />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entries.map(({ stage, count }) => (
+                      <StageLegendChip key={stage.id} stage={stage} count={count} overdueCount={0} isTerminal={stage.is_terminal} />
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

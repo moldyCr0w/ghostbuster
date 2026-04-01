@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const COLORS = [
   '#6B7280', '#3B82F6', '#8B5CF6', '#F59E0B',
@@ -30,20 +31,31 @@ function ColorPicker({ value, onChange }) {
 }
 
 export default function Settings() {
-  const [stages, setStages]     = useState([]);
-  const [newName, setNewName]   = useState('');
-  const [newColor, setNewColor] = useState(COLORS[0]);
-  const [newTerm, setNewTerm]   = useState(false);
-  const [newHire, setNewHire]   = useState(false);
-  const [editId, setEditId]     = useState(null);
+  const { user: me } = useAuth();
+
+  // ── Stages state ────────────────────────────────────────────
+  const [stages, setStages]       = useState([]);
+  const [newName, setNewName]     = useState('');
+  const [newColor, setNewColor]   = useState(COLORS[0]);
+  const [newTerm, setNewTerm]     = useState(false);
+  const [newHire, setNewHire]     = useState(false);
+  const [editId, setEditId]       = useState(null);
   const [editName, setEditName]   = useState('');
   const [editColor, setEditColor] = useState('');
   const [editTerm, setEditTerm]   = useState(false);
   const [editHire, setEditHire]   = useState(false);
-  const [error, setError]       = useState('');
+  const [error, setError]         = useState('');
+
+  // ── Users state ─────────────────────────────────────────────
+  const [users, setUsers]           = useState([]);
+  const [userForm, setUserForm]     = useState({ name: '', email: '', role: 'recruiter' });
+  const [userError, setUserError]   = useState('');
+  const [pinInfo, setPinInfo]       = useState(null); // { name, pin } for display after creation
 
   const load = useCallback(async () => {
-    setStages(await api.getStages());
+    const [s, u] = await Promise.all([api.getStages(), api.getUsers()]);
+    setStages(s);
+    setUsers(u);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -84,6 +96,29 @@ export default function Settings() {
       is_hire:     editHire,
     });
     setEditId(null);
+    load();
+  };
+
+  // ── User handlers ────────────────────────────────────────────
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    setUserError('');
+    setPinInfo(null);
+    const res = await api.createUser(userForm);
+    if (res.error) { setUserError(res.error); return; }
+    // Generate a PIN for the new user immediately so admin can share it
+    const pinRes = await fetch('/api/auth/request', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email: userForm.email }),
+    }).then(r => r.json());
+    if (pinRes.pin) setPinInfo({ name: userForm.name, pin: pinRes.pin, email: userForm.email });
+    setUserForm({ name: '', email: '', role: 'recruiter' });
+    load();
+  };
+
+  const handleDeleteUser = async (u) => {
+    await api.deleteUser(u.id);
     load();
   };
 
@@ -230,6 +265,133 @@ export default function Settings() {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* ── Users ─────────────────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-800">Team Access</h2>
+          <p className="text-slate-400 text-sm mt-0.5">
+            Add recruiters so they can sign in with a magic PIN. Hiring managers don't need accounts — share the <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">/hm</code> link with them instead.
+          </p>
+        </div>
+
+        {/* PIN callout — shown after creating a user */}
+        {pinInfo && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+            <p className="text-sm font-semibold text-green-800 mb-1">
+              ✓ {pinInfo.name} was added — here's their first sign-in PIN
+            </p>
+            <p className="text-3xl font-mono font-bold tracking-widest text-green-700 mb-1">
+              {pinInfo.pin}
+            </p>
+            <p className="text-xs text-green-600">
+              Share this with {pinInfo.name} ({pinInfo.email}) — it expires in 10 minutes.
+              They can request a new PIN from the login page any time.
+            </p>
+            <button
+              onClick={() => setPinInfo(null)}
+              className="mt-2 text-xs text-green-700 underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Users list */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Users</p>
+            <p className="text-xs text-slate-400">{users.length} total</p>
+          </div>
+          {users.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-sm">
+              No users yet — the app is currently open to anyone on the network.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {users.map(u => (
+                <li key={u.id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-800">{u.name}</span>
+                      <span className={`px-1.5 py-0.5 text-xs rounded-full font-medium ${
+                        u.role === 'admin'
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-blue-100 text-blue-700'
+                      }`}>
+                        {u.role}
+                      </span>
+                      {me?.email === u.email && (
+                        <span className="text-xs text-slate-400">(you)</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
+                  </div>
+                  {me?.email !== u.email && (
+                    <button
+                      onClick={() => handleDeleteUser(u)}
+                      className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {userError && (
+          <p className="text-red-600 text-sm mb-4 bg-red-50 border border-red-100 rounded-lg px-4 py-2">
+            {userError}
+          </p>
+        )}
+
+        {/* Add user form */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Add User</h3>
+          <form onSubmit={handleAddUser} className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Full Name *</label>
+              <input
+                required
+                value={userForm.name}
+                onChange={e => setUserForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Jane Smith"
+                className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex-1 min-w-48">
+              <label className="block text-xs text-slate-500 mb-1">Email *</label>
+              <input
+                required
+                type="email"
+                value={userForm.email}
+                onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="jane@company.com"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Role</label>
+              <select
+                value={userForm.role}
+                onChange={e => setUserForm(f => ({ ...f, role: e.target.value }))}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="recruiter">Recruiter</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Add User
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
