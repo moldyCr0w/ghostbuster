@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api';
 
 function fmtDate(iso) {
@@ -7,35 +7,289 @@ function fmtDate(iso) {
   } catch { return iso; }
 }
 
-/* ── Rich candidate card for HM review ──────────────────────────── */
-function HMCandidateCard({ candidate, stages, onDecision }) {
-  const [expanded, setExpanded]     = useState(false);
-  const [videoNotes, setVideoNotes] = useState(null); // null = not yet fetched
-  const [note, setNote]             = useState('');
-  const [authorName, setAuthorName] = useState('');
-  const [saving, setSaving]         = useState(false);
-  const [saved, setSaved]           = useState(false);
-  const [deciding, setDeciding]     = useState(null); // 'forward' | 'decline' | null
-
-  const stage       = stages.find(s => s.id === candidate.stage_id);
-  const isHmReview  = !!stage?.is_hm_review;
-
-  // Lazy-load video notes when expanding
-  const handleExpand = async () => {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && videoNotes === null) {
-      const notes = await api.getVideoNotes(candidate.id);
-      setVideoNotes(notes);
-    }
+/* ── Stat card ─────────────────────────────────────────────────── */
+function HMStatCard({ icon, value, label, color = 'slate' }) {
+  const colors = {
+    orange: 'bg-orange-50 border-orange-200 text-orange-700',
+    green:  'bg-emerald-50 border-emerald-200 text-emerald-700',
+    blue:   'bg-blue-50 border-blue-200 text-blue-700',
+    slate:  'bg-slate-50 border-slate-200 text-slate-700',
   };
+  return (
+    <div className={`rounded-xl border px-5 py-4 ${colors[color] || colors.slate}`}>
+      <div className="flex items-center gap-3">
+        <span className="text-2xl">{icon}</span>
+        <div>
+          <div className="text-2xl font-bold leading-none">{value}</div>
+          <div className="text-xs font-medium mt-1 opacity-70">{label}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Action card — hero decision card in the queue ─────────────── */
+function HMActionCard({ candidate, req, onDecision, onViewDetails }) {
+  const [deciding, setDeciding] = useState(null);
 
   const handleDecision = async (decision) => {
     setDeciding(decision);
     await api.hmDecision(candidate.id, decision);
     onDecision(candidate.id, decision);
-    // setDeciding stays set — card will be re-rendered / removed by parent
   };
+
+  const notesPreview = candidate.notes
+    ? candidate.notes.length > 120
+      ? candidate.notes.slice(0, 120) + '…'
+      : candidate.notes
+    : null;
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-orange-200 shadow-sm p-5 w-80 shrink-0 flex flex-col">
+      {/* Candidate info */}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-800 text-sm leading-tight">
+            {candidate.display_name || candidate.name}
+          </p>
+          {candidate.email && (
+            <p className="text-xs text-slate-400 mt-0.5 truncate">{candidate.email}</p>
+          )}
+        </div>
+        <button
+          onClick={() => onViewDetails(candidate)}
+          className="text-xs text-slate-400 hover:text-blue-600 shrink-0 transition-colors"
+          title="View details"
+        >
+          Details &rarr;
+        </button>
+      </div>
+
+      {/* Req badge */}
+      {req && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded font-mono">
+            {req.req_id}
+          </span>
+          <span className="text-xs text-slate-500 truncate">{req.title}</span>
+        </div>
+      )}
+
+      {/* Notes preview */}
+      {notesPreview && (
+        <div className="bg-slate-50 rounded-lg p-3 mb-3 flex-1">
+          <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-1">Recruiter Notes</p>
+          <p className="text-xs text-slate-600 leading-relaxed">{notesPreview}</p>
+        </div>
+      )}
+      {!notesPreview && <div className="flex-1" />}
+
+      {/* Quick links */}
+      <div className="flex items-center gap-3 mb-4">
+        {candidate.resume_path && (
+          <a
+            href={`/uploads/${candidate.resume_path}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Resume
+          </a>
+        )}
+        {candidate.linkedin_url && (
+          <a
+            href={candidate.linkedin_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            LinkedIn
+          </a>
+        )}
+      </div>
+
+      {/* Decision buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => handleDecision('forward')}
+          disabled={!!deciding}
+          className="flex-1 px-4 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+        >
+          {deciding === 'forward' ? 'Forwarding…' : 'Forward'}
+        </button>
+        <button
+          onClick={() => handleDecision('decline')}
+          disabled={!!deciding}
+          className="flex-1 px-4 py-2.5 bg-red-500 text-white text-sm font-bold rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+        >
+          {deciding === 'decline' ? 'Declining…' : 'Decline'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Kanban card — compact card in the board columns ───────────── */
+function HMKanbanCard({ candidate, stage, onDecision, onClick }) {
+  const [deciding, setDeciding] = useState(null);
+  const isHmReview = !!stage?.is_hm_review;
+
+  const handleDecision = async (e, decision) => {
+    e.stopPropagation();
+    setDeciding(decision);
+    await api.hmDecision(candidate.id, decision);
+    onDecision(candidate.id, decision);
+  };
+
+  return (
+    <div
+      onClick={() => onClick(candidate)}
+      className={`bg-white rounded-lg border p-3 cursor-pointer hover:shadow-md transition-shadow ${
+        isHmReview ? 'border-l-4' : 'border-l-4'
+      }`}
+      style={{ borderLeftColor: stage?.color || '#94a3b8' }}
+    >
+      <p className="text-sm font-semibold text-slate-800 leading-tight">
+        {candidate.display_name || candidate.name}
+      </p>
+      {candidate.email && (
+        <p className="text-xs text-slate-400 mt-0.5 truncate">{candidate.email}</p>
+      )}
+
+      {/* Req badges */}
+      {candidate.reqs?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {candidate.reqs.map(r => (
+            <span key={r.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded font-mono">
+              {r.req_id}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Quick links */}
+      <div className="flex items-center gap-2 mt-1.5">
+        {candidate.resume_path && (
+          <a
+            href={`/uploads/${candidate.resume_path}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-xs text-blue-500 hover:text-blue-700"
+          >
+            Resume
+          </a>
+        )}
+        {candidate.linkedin_url && (
+          <a
+            href={candidate.linkedin_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            className="text-xs text-blue-500 hover:text-blue-700"
+          >
+            LinkedIn
+          </a>
+        )}
+      </div>
+
+      {/* Inline decision buttons for HM Review cards */}
+      {isHmReview && (
+        <div className="flex gap-1.5 mt-2.5">
+          <button
+            onClick={e => handleDecision(e, 'forward')}
+            disabled={!!deciding}
+            className="flex-1 px-2 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+          >
+            {deciding === 'forward' ? '…' : 'Forward'}
+          </button>
+          <button
+            onClick={e => handleDecision(e, 'decline')}
+            disabled={!!deciding}
+            className="flex-1 px-2 py-1.5 bg-red-500 text-white text-xs font-bold rounded hover:bg-red-600 disabled:opacity-50 transition-colors"
+          >
+            {deciding === 'decline' ? '…' : 'Decline'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Kanban column ─────────────────────────────────────────────── */
+function HMKanbanColumn({ stage, candidates, onDecision, onCardClick }) {
+  const isHmReview = !!stage.is_hm_review;
+  const hasWaiting = isHmReview && candidates.length > 0;
+
+  return (
+    <div className="flex flex-col w-56 shrink-0">
+      {/* Column header */}
+      <div
+        className={`flex items-center justify-between px-3 py-2 rounded-t-lg border border-b-0 ${
+          hasWaiting ? 'ring-2 ring-orange-300 ring-inset' : ''
+        }`}
+        style={{ backgroundColor: stage.color + '18', borderColor: stage.color + '50' }}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+          <span className="text-xs font-semibold text-slate-700 truncate">{stage.name}</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {hasWaiting && (
+            <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+          )}
+          <span
+            className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+            style={{ backgroundColor: stage.color + '25', color: stage.color }}
+          >
+            {candidates.length}
+          </span>
+        </div>
+      </div>
+
+      {/* Card list */}
+      <div
+        className={`flex-1 rounded-b-lg border p-2 space-y-2 overflow-y-auto ${
+          hasWaiting
+            ? 'bg-orange-50/50 border-orange-200'
+            : 'bg-slate-50/80 border-slate-200'
+        }`}
+        style={{ minHeight: 100, maxHeight: 'calc(100vh - 480px)' }}
+      >
+        {candidates.map(c => (
+          <HMKanbanCard
+            key={c.id}
+            candidate={c}
+            stage={stage}
+            onDecision={onDecision}
+            onClick={onCardClick}
+          />
+        ))}
+        {candidates.length === 0 && (
+          <div className="flex items-center justify-center h-14">
+            <span className="text-xs text-slate-300 italic select-none">No candidates</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Candidate detail drawer (slide-out from right) ───────────── */
+function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
+  const [videoNotes, setVideoNotes] = useState(null);
+  const [note, setNote]             = useState('');
+  const [authorName, setAuthorName] = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(false);
+  const [deciding, setDeciding]     = useState(null);
+
+  const stage = stages.find(s => s.id === candidate.stage_id);
+  const isHmReview = !!stage?.is_hm_review;
+
+  useEffect(() => {
+    api.getVideoNotes(candidate.id).then(setVideoNotes);
+  }, [candidate.id]);
 
   const handleAddNote = async (e) => {
     e.preventDefault();
@@ -48,114 +302,134 @@ function HMCandidateCard({ candidate, stages, onDecision }) {
     setTimeout(() => setSaved(false), 3000);
   };
 
+  const handleDecision = async (decision) => {
+    setDeciding(decision);
+    await api.hmDecision(candidate.id, decision);
+    onDecision(candidate.id, decision);
+  };
+
   return (
-    <div
-      className={`rounded-lg border p-4 transition-all ${
-        isHmReview
-          ? 'border-orange-300 bg-orange-50'
-          : 'border-slate-100 bg-white'
-      }`}
-    >
-      {/* ── Top row: name + stage badge + decision buttons ── */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-slate-800 text-sm">
-              {candidate.display_name || candidate.name}
-            </span>
-            <span
-              className="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
-              style={{
-                backgroundColor: (candidate.stage_color || '#94a3b8') + '20',
-                color: candidate.stage_color || '#64748b',
-                border: `1px solid ${(candidate.stage_color || '#94a3b8')}40`,
-              }}
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 z-40 transition-opacity"
+        onClick={onClose}
+      />
+      {/* Drawer */}
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col overflow-hidden animate-slide-in">
+        {/* Drawer header */}
+        <div className="px-6 py-4 border-b border-slate-200 shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-slate-800 leading-tight">
+                {candidate.display_name || candidate.name}
+              </h3>
+              {candidate.email && (
+                <p className="text-sm text-slate-400 mt-0.5">{candidate.email}</p>
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                <span
+                  className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  style={{
+                    backgroundColor: (stage?.color || '#94a3b8') + '20',
+                    color: stage?.color || '#64748b',
+                    border: `1px solid ${(stage?.color || '#94a3b8')}40`,
+                  }}
+                >
+                  {candidate.stage_name || stage?.name}
+                </span>
+                {isHmReview && (
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full border border-orange-200">
+                    Awaiting Decision
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-600 text-xl leading-none p-1 transition-colors"
             >
-              {candidate.stage_name}
-            </span>
-            {isHmReview && (
-              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full border border-orange-200">
-                Awaiting Decision
-              </span>
+              &times;
+            </button>
+          </div>
+
+          {/* Quick links */}
+          <div className="flex items-center gap-4 mt-3">
+            {candidate.resume_path && (
+              <a
+                href={`/uploads/${candidate.resume_path}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                View Resume
+              </a>
+            )}
+            {candidate.linkedin_url && (
+              <a
+                href={candidate.linkedin_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                LinkedIn
+              </a>
             )}
           </div>
-          {candidate.email && (
-            <p className="text-xs text-slate-400 mt-0.5">{candidate.email}</p>
+
+          {/* Decision buttons in drawer header for HM Review */}
+          {isHmReview && (
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => handleDecision('forward')}
+                disabled={!!deciding}
+                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {deciding === 'forward' ? 'Forwarding…' : 'Forward to Next Stage'}
+              </button>
+              <button
+                onClick={() => handleDecision('decline')}
+                disabled={!!deciding}
+                className="flex-1 px-4 py-2.5 bg-red-500 text-white text-sm font-bold rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+              >
+                {deciding === 'decline' ? 'Declining…' : 'Decline'}
+              </button>
+            </div>
           )}
         </div>
 
-        {/* Forward / Decline buttons — HM Review candidates only */}
-        {isHmReview && (
-          <div className="flex gap-2 shrink-0">
-            <button
-              onClick={() => handleDecision('forward')}
-              disabled={!!deciding}
-              className="px-4 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors flex items-center gap-1"
-            >
-              {deciding === 'forward' ? '…' : '✓ Forward'}
-            </button>
-            <button
-              onClick={() => handleDecision('decline')}
-              disabled={!!deciding}
-              className="px-4 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors flex items-center gap-1"
-            >
-              {deciding === 'decline' ? '…' : '✕ Decline'}
-            </button>
-          </div>
-        )}
-      </div>
+        {/* Drawer body — scrollable */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
 
-      {/* ── Quick links row ── */}
-      <div className="flex items-center gap-4 mt-2">
-        {candidate.resume_path && (
-          <a
-            href={`/uploads/${candidate.resume_path}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-          >
-            📄 Resume
-          </a>
-        )}
-        {candidate.linkedin_url && (
-          <a
-            href={candidate.linkedin_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-          >
-            🔗 LinkedIn
-          </a>
-        )}
-        <button
-          onClick={handleExpand}
-          className="text-xs text-slate-400 hover:text-slate-600 ml-auto transition-colors"
-        >
-          {expanded ? '▲ Less' : '▼ Notes & Details'}
-        </button>
-      </div>
-
-      {/* ── Expanded panel ── */}
-      {expanded && (
-        <div className="mt-3 pt-3 border-t border-slate-200 space-y-4">
+          {/* Req associations */}
+          {candidate.reqs?.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Requisitions</p>
+              <div className="flex flex-wrap gap-2">
+                {candidate.reqs.map(r => (
+                  <span key={r.id} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs rounded-lg font-mono">
+                    {r.req_id}{r.title ? ` · ${r.title}` : ''}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recruiter notes */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
-              Recruiter Notes
-            </p>
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Recruiter Notes</p>
             {candidate.notes ? (
-              <pre className="text-xs text-slate-700 whitespace-pre-wrap bg-white border border-slate-100 rounded-lg p-3 font-sans leading-relaxed">
+              <pre className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 border border-slate-100 rounded-lg p-4 font-sans leading-relaxed">
                 {candidate.notes}
               </pre>
             ) : (
-              <p className="text-xs text-slate-400 italic">No recruiter notes yet.</p>
+              <p className="text-sm text-slate-400 italic">No recruiter notes yet.</p>
             )}
           </div>
 
           {/* Video screen notes */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
               Video Screen Notes
               {videoNotes !== null && videoNotes.length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-normal normal-case tracking-normal">
@@ -164,18 +438,18 @@ function HMCandidateCard({ candidate, stages, onDecision }) {
               )}
             </p>
             {videoNotes === null ? (
-              <p className="text-xs text-slate-400 italic">Loading…</p>
+              <p className="text-sm text-slate-400 italic">Loading…</p>
             ) : videoNotes.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No video screen notes.</p>
+              <p className="text-sm text-slate-400 italic">No video screen notes.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {videoNotes.map(vn => (
-                  <div key={vn.id} className="bg-white border border-slate-100 rounded-lg p-3">
-                    <p className="text-xs text-slate-400 mb-1">
+                  <div key={vn.id} className="bg-slate-50 border border-slate-100 rounded-lg p-4">
+                    <p className="text-xs text-slate-400 mb-1.5">
                       <span className="font-medium text-slate-600">{vn.author || 'Unknown'}</span>
                       {' · '}{fmtDate(vn.created_at)}
                     </p>
-                    <p className="text-xs text-slate-700 whitespace-pre-wrap">{vn.note}</p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{vn.note}</p>
                   </div>
                 ))}
               </div>
@@ -184,171 +458,70 @@ function HMCandidateCard({ candidate, stages, onDecision }) {
 
           {/* Add HM note */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
-              Add a Note
-            </p>
+            <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Add a Note</p>
             <form onSubmit={handleAddNote} className="space-y-2">
               <input
                 value={authorName}
                 onChange={e => setAuthorName(e.target.value)}
                 placeholder="Your name (optional)"
-                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <textarea
-                rows={2}
+                rows={3}
                 value={note}
                 onChange={e => setNote(e.target.value)}
                 placeholder="Add a note visible to the recruiter…"
-                className="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <div className="flex items-center gap-2">
                 <button
                   type="submit"
                   disabled={saving || !note.trim()}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
                   {saving ? 'Saving…' : 'Add Note'}
                 </button>
-                {saved && <span className="text-xs text-green-600 font-medium">✓ Saved</span>}
+                {saved && <span className="text-sm text-green-600 font-medium">Saved</span>}
               </div>
             </form>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
-/* ── Req card — pipeline bar + candidate list ───────────────────── */
-function HMReqCard({ req, stages, candidates, onDecision }) {
-  const [expanded, setExpanded] = useState(false);
+/* ── Toast notification ────────────────────────────────────────── */
+function Toast({ message, type, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 3000);
+    return () => clearTimeout(t);
+  }, [onDone]);
 
-  // Auto-expand if any candidates are awaiting HM decision
-  const hmReviewStage    = stages.find(s => s.is_hm_review);
-  const awaitingDecision = hmReviewStage
-    ? candidates.filter(c => c.stage_id === hmReviewStage.id)
-    : [];
-
-  // Stage distribution for proportional bar
-  const stageMap = {};
-  for (const c of candidates) {
-    stageMap[c.stage_id] = (stageMap[c.stage_id] || 0) + 1;
-  }
-
-  const activeStages   = stages.filter(s => !s.is_terminal && stageMap[s.id] > 0);
-  const terminalStages = stages.filter(s =>  s.is_terminal && stageMap[s.id] > 0);
-  const visibleStages  = [...activeStages, ...terminalStages];
-
-  // Sort candidates: HM Review first, then by stage order
-  const sortedCandidates = [...candidates].sort((a, b) => {
-    const aIsHm = a.stage_id === hmReviewStage?.id ? 0 : 1;
-    const bIsHm = b.stage_id === hmReviewStage?.id ? 0 : 1;
-    if (aIsHm !== bIsHm) return aIsHm - bIsHm;
-    return (a.order_index || 0) - (b.order_index || 0);
-  });
+  const bg = type === 'forward'
+    ? 'bg-emerald-700'
+    : type === 'decline'
+    ? 'bg-red-600'
+    : 'bg-slate-800';
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-slate-400">{req.req_id}</span>
-            <span className="font-semibold text-slate-800 text-base">{req.title}</span>
-          </div>
-          {req.department && (
-            <p className="text-xs text-slate-400 mt-0.5">{req.department}</p>
-          )}
-          {req.hiring_manager && (
-            <p className="text-xs text-slate-500 mt-0.5">HM: <span className="font-medium">{req.hiring_manager}</span></p>
-          )}
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="text-2xl font-bold text-slate-700 leading-none">{candidates.length}</div>
-          <div className="text-xs text-slate-400 mt-0.5">candidate{candidates.length !== 1 ? 's' : ''}</div>
-          {awaitingDecision.length > 0 && (
-            <div className="mt-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full">
-              {awaitingDecision.length} pending ↓
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Proportional stage bar */}
-      {visibleStages.length > 0 && (
-        <div className="space-y-2 mb-3">
-          <div className="flex gap-1">
-            {visibleStages.map(s => (
-              <div
-                key={s.id}
-                className={`flex items-center justify-center py-1.5 rounded border text-xs font-bold ${
-                  s.is_terminal ? 'opacity-40' : ''
-                }`}
-                style={{
-                  flex: stageMap[s.id] || 0,
-                  minWidth: 0,
-                  borderColor: s.color + '60',
-                  backgroundColor: s.color + '15',
-                  color: s.color,
-                }}
-                title={`${s.name}: ${stageMap[s.id] || 0}`}
-              >
-                {stageMap[s.id] || 0}
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {visibleStages.map(s => (
-              <div
-                key={s.id}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap ${
-                  s.is_terminal ? 'opacity-40' : ''
-                }`}
-                style={{ borderColor: s.color + '50', backgroundColor: s.color + '12', color: '#374151' }}
-              >
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                {s.name}{' '}
-                <span className="font-bold" style={{ color: s.color }}>{stageMap[s.id]}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Expand / collapse */}
-      {candidates.length > 0 && (
-        <>
-          <button
-            onClick={() => setExpanded(e => !e)}
-            className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
-          >
-            {expanded ? '▲ Hide candidates' : '▼ Show candidates & notes'}
-          </button>
-          {expanded && (
-            <div className="mt-3 border-t border-slate-100 pt-3 space-y-3">
-              {sortedCandidates.map(c => (
-                <HMCandidateCard
-                  key={c.id}
-                  candidate={c}
-                  stages={stages}
-                  onDecision={onDecision}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
+    <div className={`fixed bottom-6 right-6 ${bg} text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium z-50 animate-fade-up`}>
+      {message}
     </div>
   );
 }
 
-/* ── HM View page ─────────────────────────────────────────────────── */
+/* ── Main HM View page ────────────────────────────────────────── */
 export default function HMView() {
-  const [reqs, setReqs]             = useState([]);
-  const [stages, setStages]         = useState([]);
-  const [candidates, setCandidates] = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [hmFilter, setHmFilter]     = useState('');
+  const [reqs, setReqs]               = useState([]);
+  const [stages, setStages]           = useState([]);
+  const [candidates, setCandidates]   = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [hmFilter, setHmFilter]       = useState('');
+  const [selectedReq, setSelectedReq] = useState('all');
+  const [drawerCandidate, setDrawerCandidate] = useState(null);
+  const [toast, setToast]             = useState(null);
+  const actionQueueRef                = useRef(null);
 
   const load = useCallback(async () => {
     const [r, s, c] = await Promise.all([api.getReqs(), api.getStages(), api.getCandidates()]);
@@ -360,8 +533,12 @@ export default function HMView() {
 
   useEffect(() => { load(); }, [load]);
 
-  // After an HM decision, reload everything so the candidate moves stages
-  const handleDecision = useCallback(async () => {
+  const handleDecision = useCallback(async (candidateId, decision) => {
+    setToast({
+      message: decision === 'forward' ? 'Candidate forwarded to next stage' : 'Candidate declined',
+      type: decision,
+    });
+    setDrawerCandidate(null);
     const [s, c] = await Promise.all([api.getStages(), api.getCandidates()]);
     setStages(s);
     setCandidates(c);
@@ -370,25 +547,28 @@ export default function HMView() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <span className="text-slate-400 text-sm">Loading…</span>
+        <div className="text-center">
+          <div className="text-4xl mb-3 animate-pulse">&#128123;</div>
+          <span className="text-slate-400 text-sm">Loading your pipeline…</span>
+        </div>
       </div>
     );
   }
 
   const hiringManagers = [...new Set(reqs.map(r => r.hiring_manager).filter(Boolean))].sort();
 
-  // Only show open/active reqs
+  // Only open/active reqs, filtered by HM
   const visibleReqs = reqs
     .filter(r => r.status !== 'closed' && r.status !== 'filled')
     .filter(r => !hmFilter || r.hiring_manager === hmFilter);
 
-  // How many total candidates are awaiting HM decision
-  const hmReviewStage    = stages.find(s => s.is_hm_review);
-  const totalAwaiting    = hmReviewStage
-    ? candidates.filter(c => c.stage_id === hmReviewStage.id).length
-    : 0;
+  // Stage references
+  const hmReviewStage = stages.find(s => s.is_hm_review);
+  const activeStages = stages
+    .filter(s => !s.is_terminal)
+    .sort((a, b) => a.order_index - b.order_index);
 
-  // Build candidates-per-req lookup
+  // Candidates per req lookup
   const candsByReq = {};
   for (const c of candidates) {
     if (c.reqs?.length > 0) {
@@ -399,87 +579,281 @@ export default function HMView() {
     }
   }
 
+  // All candidates awaiting HM decision (across visible reqs)
+  const visibleReqIds = new Set(visibleReqs.map(r => r.id));
+  const awaitingDecision = hmReviewStage
+    ? candidates.filter(c =>
+        c.stage_id === hmReviewStage.id &&
+        c.reqs?.some(r => visibleReqIds.has(r.id))
+      )
+    : [];
+
+  // Dedup awaiting candidates (a candidate might be on multiple visible reqs)
+  const seenIds = new Set();
+  const uniqueAwaiting = awaitingDecision.filter(c => {
+    if (seenIds.has(c.id)) return false;
+    seenIds.add(c.id);
+    return true;
+  });
+
+  // Total active across visible reqs
+  const allVisibleCandidates = new Set();
+  for (const req of visibleReqs) {
+    for (const c of (candsByReq[req.id] || [])) {
+      allVisibleCandidates.add(c.id);
+    }
+  }
+  const totalActive = allVisibleCandidates.size;
+
+  // Kanban: candidates for selected req or all
+  const kanbanCandidates = selectedReq === 'all'
+    ? (() => {
+        // Merge all visible req candidates, deduped
+        const seen = new Set();
+        const merged = [];
+        for (const req of visibleReqs) {
+          for (const c of (candsByReq[req.id] || [])) {
+            if (!seen.has(c.id)) {
+              seen.add(c.id);
+              merged.push(c);
+            }
+          }
+        }
+        return merged;
+      })()
+    : (candsByReq[Number(selectedReq)] || []);
+
+  // Non-terminal only for Kanban
+  const kanbanActive = kanbanCandidates.filter(c => !c.is_terminal);
+
+  // Build stage -> candidate list
+  const byStage = {};
+  for (const s of activeStages) byStage[s.id] = [];
+  for (const c of kanbanActive) {
+    if (byStage[c.stage_id]) byStage[c.stage_id].push(c);
+  }
+
+  // Find the first req for each awaiting candidate (for display in action cards)
+  const reqForCandidate = (c) => {
+    if (!c.reqs?.length) return null;
+    return visibleReqs.find(r => c.reqs.some(cr => cr.id === r.id)) || null;
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header bar */}
-      <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">👻</span>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* ── Header bar ── */}
+      <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">&#128123;</span>
           <div>
             <h1 className="text-base font-bold leading-tight">GhostBuster</h1>
-            <p className="text-slate-400 text-xs">Hiring Manager View</p>
+            <p className="text-slate-400 text-xs">Hiring Manager Portal</p>
           </div>
         </div>
-        <a href="/" className="text-xs text-slate-400 hover:text-white transition-colors">
-          Recruiter portal →
-        </a>
+        <div className="flex items-center gap-4">
+          {/* HM filter */}
+          {hiringManagers.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select
+                value={hmFilter}
+                onChange={e => setHmFilter(e.target.value)}
+                className={`text-xs rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                  hmFilter
+                    ? 'border-blue-400 bg-blue-900/40 text-blue-200 font-medium'
+                    : 'border-slate-600 bg-slate-800 text-slate-300'
+                }`}
+              >
+                <option value="">All Hiring Managers</option>
+                {hiringManagers.map(hm => <option key={hm} value={hm}>{hm}</option>)}
+              </select>
+              {hmFilter && (
+                <button onClick={() => setHmFilter('')} className="text-xs text-slate-500 hover:text-slate-300">
+                  &times;
+                </button>
+              )}
+            </div>
+          )}
+          <a href="/" className="text-xs text-slate-500 hover:text-white transition-colors">
+            Recruiter portal &rarr;
+          </a>
+        </div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-8">
-        {/* Page title + awaiting banner */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-slate-800">Active Pipeline</h2>
-          <p className="text-slate-400 text-sm mt-0.5">
-            Review candidates and click <strong>Forward</strong> or <strong>Decline</strong> for anyone awaiting your decision.
-          </p>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-8 pt-6 shrink-0">
+          {/* ── Stats row ── */}
+          <div className="grid grid-cols-3 gap-4 mb-6 max-w-2xl">
+            <HMStatCard
+              icon="&#128276;"
+              value={uniqueAwaiting.length}
+              label="Awaiting Decision"
+              color="orange"
+            />
+            <HMStatCard
+              icon="&#9989;"
+              value={totalActive}
+              label="Active Candidates"
+              color="blue"
+            />
+            <HMStatCard
+              icon="&#128203;"
+              value={visibleReqs.length}
+              label={`Open Req${visibleReqs.length !== 1 ? 's' : ''}`}
+              color="green"
+            />
+          </div>
+
+          {/* ── Action queue ── */}
+          {uniqueAwaiting.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wide">
+                  Needs Your Decision
+                </h2>
+                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
+                  {uniqueAwaiting.length}
+                </span>
+              </div>
+              <div
+                ref={actionQueueRef}
+                className="flex gap-4 overflow-x-auto pb-2"
+                style={{ scrollSnapType: 'x mandatory' }}
+              >
+                {uniqueAwaiting.map(c => (
+                  <div key={c.id} style={{ scrollSnapAlign: 'start' }}>
+                    <HMActionCard
+                      candidate={c}
+                      req={reqForCandidate(c)}
+                      onDecision={handleDecision}
+                      onViewDetails={setDrawerCandidate}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {uniqueAwaiting.length === 0 && (
+            <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
+              <p className="text-sm text-emerald-700 font-medium">
+                All caught up — no candidates awaiting your decision right now.
+              </p>
+            </div>
+          )}
+
+          {/* ── Req tabs ── */}
+          {visibleReqs.length > 0 && (
+            <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1">
+              <button
+                onClick={() => setSelectedReq('all')}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                  selectedReq === 'all'
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                All Reqs
+                <span className="ml-1.5 opacity-60">({totalActive})</span>
+              </button>
+              {visibleReqs.map(r => {
+                const count = (candsByReq[r.id] || []).filter(c => !c.is_terminal).length;
+                const hasPending = hmReviewStage && (candsByReq[r.id] || []).some(c => c.stage_id === hmReviewStage.id);
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setSelectedReq(String(r.id))}
+                    className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap relative ${
+                      String(selectedReq) === String(r.id)
+                        ? 'bg-slate-800 text-white'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {r.req_id} &middot; {r.title}
+                    <span className="ml-1.5 opacity-60">({count})</span>
+                    {hasPending && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-400 rounded-full border-2 border-slate-50" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {totalAwaiting > 0 && (
-          <div className="mb-5 flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-5 py-3">
-            <span className="text-2xl">🔍</span>
-            <p className="text-sm text-orange-800 font-medium">
-              <span className="font-bold">{totalAwaiting}</span>{' '}
-              candidate{totalAwaiting !== 1 ? 's' : ''} awaiting your decision across your open reqs.
-            </p>
-          </div>
-        )}
-
-        {/* HM filter */}
-        {hiringManagers.length > 0 && (
-          <div className="flex items-center gap-2 mb-5">
-            <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Show reqs for:</label>
-            <select
-              value={hmFilter}
-              onChange={e => setHmFilter(e.target.value)}
-              className={`text-sm rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                hmFilter
-                  ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
-                  : 'border-slate-200 bg-white text-slate-700'
-              }`}
-            >
-              <option value="">All Hiring Managers</option>
-              {hiringManagers.map(hm => <option key={hm} value={hm}>{hm}</option>)}
-            </select>
-            {hmFilter && (
-              <button
-                onClick={() => setHmFilter('')}
-                className="text-xs text-slate-400 hover:text-slate-600"
-              >
-                ✕ Clear
-              </button>
-            )}
-          </div>
-        )}
-
-        {visibleReqs.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <div className="text-4xl mb-3">📋</div>
-            <p className="text-sm">No active requisitions found.</p>
+        {/* ── Kanban board ── */}
+        {visibleReqs.length > 0 ? (
+          <div className="flex-1 overflow-x-auto overflow-y-hidden px-8 pb-6">
+            <div className="flex gap-3 h-full items-start" style={{ minWidth: 'max-content' }}>
+              {activeStages.map(stage => (
+                <HMKanbanColumn
+                  key={stage.id}
+                  stage={stage}
+                  candidates={byStage[stage.id] || []}
+                  onDecision={handleDecision}
+                  onCardClick={setDrawerCandidate}
+                />
+              ))}
+              {activeStages.length === 0 && (
+                <div className="flex items-center justify-center w-full py-16 text-slate-400">
+                  <p className="text-sm">No active stages configured.</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {visibleReqs.map(req => (
-              <HMReqCard
-                key={req.id}
-                req={req}
-                stages={stages}
-                candidates={candsByReq[req.id] || []}
-                onDecision={handleDecision}
-              />
-            ))}
+          <div className="flex-1 flex items-center justify-center text-slate-400">
+            <div className="text-center">
+              <div className="text-5xl mb-3">&#128203;</div>
+              <p className="text-sm">No active requisitions found.</p>
+              {hmFilter && (
+                <button
+                  onClick={() => setHmFilter('')}
+                  className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* ── Candidate detail drawer ── */}
+      {drawerCandidate && (
+        <HMCandidateDrawer
+          candidate={drawerCandidate}
+          stages={stages}
+          onClose={() => setDrawerCandidate(null)}
+          onDecision={handleDecision}
+        />
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDone={() => setToast(null)}
+        />
+      )}
+
+      {/* ── Inline styles for animations ── */}
+      <style>{`
+        @keyframes slide-in {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .animate-slide-in {
+          animation: slide-in 0.25s ease-out;
+        }
+        @keyframes fade-up {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-up {
+          animation: fade-up 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
