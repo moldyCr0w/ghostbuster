@@ -52,18 +52,17 @@ export default function Settings() {
   const [userError, setUserError]   = useState('');
   const [pinInfo, setPinInfo]       = useState(null); // { name, pin } for display after creation
 
-  // ── HM PIN state ─────────────────────────────────────────────
-  const [hmPinSet, setHmPinSet]       = useState(false);
-  const [hmPinInput, setHmPinInput]   = useState('');
-  const [hmPinError, setHmPinError]   = useState('');
-  const [hmPinSaved, setHmPinSaved]   = useState(false);
-  const [hmPinLoading, setHmPinLoading] = useState(false);
+  // ── HM Users state ───────────────────────────────────────────
+  const [hmUsers, setHmUsers]         = useState([]);
+  const [hmUserForm, setHmUserForm]   = useState({ name: '', email: '' });
+  const [hmUserError, setHmUserError] = useState('');
+  const [hmPinInfo, setHmPinInfo]     = useState(null); // { name, pin, email } after adding HM
 
   const load = useCallback(async () => {
-    const [s, u, settings] = await Promise.all([api.getStages(), api.getUsers(), api.getSettings()]);
+    const [s, u, hm] = await Promise.all([api.getStages(), api.getUsers(), api.getHmUsers()]);
     setStages(s);
     setUsers(u);
-    setHmPinSet(!!settings?.hm_pin_set);
+    setHmUsers(hm);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -130,27 +129,27 @@ export default function Settings() {
     load();
   };
 
-  // ── HM PIN handlers ──────────────────────────────────────────
-  const handleSetHmPin = async (e) => {
+  // ── HM User handlers ─────────────────────────────────────────
+  const handleAddHmUser = async (e) => {
     e.preventDefault();
-    setHmPinError('');
-    setHmPinSaved(false);
-    setHmPinLoading(true);
-    const res = await api.setHmPin(hmPinInput);
-    setHmPinLoading(false);
-    if (res.error) { setHmPinError(res.error); return; }
-    setHmPinSet(true);
-    setHmPinInput('');
-    setHmPinSaved(true);
-    setTimeout(() => setHmPinSaved(false), 3000);
+    setHmUserError('');
+    setHmPinInfo(null);
+    const res = await api.createHmUser(hmUserForm);
+    if (res.error) { setHmUserError(res.error); return; }
+    // Generate a first-login PIN immediately so admin can share it
+    const pinRes = await fetch('/api/auth/hm-request', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email: hmUserForm.email }),
+    }).then(r => r.json());
+    if (pinRes.pin) setHmPinInfo({ name: hmUserForm.name, pin: pinRes.pin, email: hmUserForm.email });
+    setHmUserForm({ name: '', email: '' });
+    load();
   };
 
-  const handleRemoveHmPin = async () => {
-    setHmPinError('');
-    const res = await api.deleteHmPin();
-    if (res.error) { setHmPinError(res.error); return; }
-    setHmPinSet(false);
-    setHmPinInput('');
+  const handleDeleteHmUser = async (u) => {
+    await api.deleteHmUser(u.id);
+    load();
   };
 
   const move = async (stage, dir) => {
@@ -303,7 +302,7 @@ export default function Settings() {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-slate-800">Team Access</h2>
           <p className="text-slate-400 text-sm mt-0.5">
-            Add recruiters so they can sign in with a magic PIN. Hiring managers don't need accounts — share the <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">/hm</code> link with them instead.
+            Add recruiters so they can sign in with a magic PIN.
           </p>
         </div>
 
@@ -425,63 +424,107 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* ── HM Portal PIN ─────────────────────────────────────── */}
+      {/* ── Hiring Managers ──────────────────────────────────── */}
       <div className="mt-10">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-800">HM Portal Access</h2>
+          <h2 className="text-lg font-bold text-slate-800">Hiring Manager Accounts</h2>
           <p className="text-slate-400 text-sm mt-0.5">
-            Set a PIN that hiring managers use to access the <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">/hm</code> portal.
-            Until a PIN is set, the portal is locked.
+            Each HM gets their own account. They sign in at{' '}
+            <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">/hm/login</code> with their email
+            and a one-time PIN you generate for them.
           </p>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          {/* Status badge */}
-          <div className="flex items-center gap-2 mb-4">
-            <div className={`w-2 h-2 rounded-full ${hmPinSet ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-            <span className="text-sm text-slate-600">
-              {hmPinSet ? 'A PIN is currently set — HM portal is active.' : 'No PIN set — HM portal is locked.'}
-            </span>
+        {/* PIN callout — shown after adding an HM */}
+        {hmPinInfo && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl">
+            <p className="text-sm font-semibold text-green-800 mb-1">
+              ✓ {hmPinInfo.name} was added — here's their first sign-in PIN
+            </p>
+            <p className="text-3xl font-mono font-bold tracking-widest text-green-700 mb-1">
+              {hmPinInfo.pin}
+            </p>
+            <p className="text-xs text-green-600">
+              Share this with {hmPinInfo.name} ({hmPinInfo.email}) — it expires in 10 minutes.
+              They can request a new PIN from the login page any time.
+            </p>
+            <button
+              onClick={() => setHmPinInfo(null)}
+              className="mt-2 text-xs text-green-700 underline"
+            >
+              Dismiss
+            </button>
           </div>
+        )}
 
-          <form onSubmit={handleSetHmPin} className="flex items-end gap-3">
-            <div className="flex-1 max-w-xs">
-              <label className="block text-xs text-slate-500 mb-1">
-                {hmPinSet ? 'New PIN (to replace current)' : 'Set PIN'}
-              </label>
+        {/* HM Users list */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Hiring Managers</p>
+            <p className="text-xs text-slate-400">{hmUsers.length} total</p>
+          </div>
+          {hmUsers.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-sm">
+              No HMs yet — add one below to enable portal access.
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {hmUsers.map(u => (
+                <li key={u.id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-slate-800">{u.name}</span>
+                    <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteHmUser(u)}
+                    className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {hmUserError && (
+          <p className="text-red-600 text-sm mb-4 bg-red-50 border border-red-100 rounded-lg px-4 py-2">
+            {hmUserError}
+          </p>
+        )}
+
+        {/* Add HM form */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Add Hiring Manager</h3>
+          <form onSubmit={handleAddHmUser} className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Full Name *</label>
               <input
-                type="password"
-                value={hmPinInput}
-                onChange={e => setHmPinInput(e.target.value)}
-                placeholder="Min. 4 characters"
-                minLength={4}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-widest"
+                required
+                value={hmUserForm.name}
+                onChange={e => setHmUserForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Alex Johnson"
+                className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex-1 min-w-48">
+              <label className="block text-xs text-slate-500 mb-1">Work Email *</label>
+              <input
+                required
+                type="email"
+                value={hmUserForm.email}
+                onChange={e => setHmUserForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="alex@company.com"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <button
               type="submit"
-              disabled={hmPinLoading || hmPinInput.trim().length < 4}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
-              {hmPinLoading ? 'Saving…' : hmPinSet ? 'Update PIN' : 'Set PIN'}
+              Add HM
             </button>
-            {hmPinSet && (
-              <button
-                type="button"
-                onClick={handleRemoveHmPin}
-                className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors"
-              >
-                Remove PIN
-              </button>
-            )}
           </form>
-
-          {hmPinSaved && (
-            <p className="mt-3 text-sm text-emerald-600 font-medium">✓ PIN saved — HM portal is active.</p>
-          )}
-          {hmPinError && (
-            <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{hmPinError}</p>
-          )}
         </div>
       </div>
     </div>

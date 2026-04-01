@@ -520,6 +520,7 @@ export default function HMView() {
   const [candidates, setCandidates]   = useState([]);
   const [loading, setLoading]         = useState(true);
   const [authed, setAuthed]           = useState(null); // null=checking, true=ok
+  const [hmName, setHmName]           = useState('');
   const [hmFilter, setHmFilter]       = useState('');
   const [selectedReq, setSelectedReq] = useState('all');
   const [drawerCandidate, setDrawerCandidate] = useState(null);
@@ -531,6 +532,7 @@ export default function HMView() {
     api.hmMe().then(res => {
       if (res.authenticated) {
         setAuthed(true);
+        if (res.name) setHmName(res.name);
       } else {
         window.location.href = '/hm/login';
       }
@@ -702,6 +704,11 @@ export default function HMView() {
                 </button>
               )}
             </div>
+          )}
+          {hmName && (
+            <span className="text-xs text-slate-400 hidden sm:block">
+              {hmName}
+            </span>
           )}
           <button
             onClick={handleLogout}

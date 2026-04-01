@@ -194,4 +194,28 @@ try {
   `);
 } catch (_) {}
 
+// Individual HM user accounts (replaces shared PIN)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hm_users (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT    NOT NULL,
+      email      TEXT    NOT NULL UNIQUE,
+      created_at TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS hm_magic_tokens (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      email      TEXT    NOT NULL,
+      pin        TEXT    NOT NULL,
+      expires_at TEXT    NOT NULL,
+      used       INTEGER DEFAULT 0,
+      created_at TEXT    DEFAULT (datetime('now'))
+    );
+  `);
+} catch (_) {}
+
+// Audit trail: record which HM made the forward/decline decision
+try { db.exec('ALTER TABLE candidates ADD COLUMN hm_decided_by TEXT'); } catch (_) {}
+
 module.exports = db;

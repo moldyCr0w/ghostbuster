@@ -83,34 +83,63 @@ router.post('/logout', (_req, res) => {
   res.json({ success: true });
 });
 
-/* ── HM portal auth ─────────────────────────────────────────── */
+/* ── HM portal auth (individual accounts + OTP) ─────────────── */
 
 const HM_COOKIE_OPTS = { httpOnly: true, sameSite: 'strict', maxAge: 30 * 24 * 60 * 60 * 1000 };
 
-// GET /api/auth/hm-me — check HM session
+// GET /api/auth/hm-me — check HM session, return name/email for header display
 router.get('/hm-me', (req, res) => {
   const token = req.cookies?.gb_hm_token;
   if (!token) return res.json({ authenticated: false });
   try {
     const payload = jwt.verify(token, SECRET);
     if (payload.role !== 'hm') return res.json({ authenticated: false });
-    res.json({ authenticated: true });
+    res.json({ authenticated: true, name: payload.name, email: payload.email });
   } catch {
     res.json({ authenticated: false });
   }
 });
 
-// POST /api/auth/hm-login — validate static HM PIN, issue session cookie
+// POST /api/auth/hm-request — generate a one-time PIN for a registered HM
+router.post('/hm-request', (req, res) => {
+  const email = (req.body.email || '').toLowerCase().trim();
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  const user = db.prepare('SELECT id, name FROM hm_users WHERE email=?').get(email);
+  if (!user) return res.status(404).json({ error: 'No HM account found for that email. Ask your recruiter to add you in Settings.' });
+
+  // Invalidate any previous unused tokens for this email
+  db.prepare('UPDATE hm_magic_tokens SET used=1 WHERE email=?').run(email);
+
+  const pin       = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  db.prepare('INSERT INTO hm_magic_tokens (email, pin, expires_at) VALUES (?, ?, ?)').run(email, pin, expiresAt);
+
+  res.json({ pin, note: 'Share this PIN securely — it expires in 10 minutes' });
+});
+
+// POST /api/auth/hm-login — validate OTP + email, issue 30-day session cookie
 router.post('/hm-login', (req, res) => {
-  const { pin } = req.body || {};
-  if (!pin) return res.status(400).json({ error: 'PIN is required' });
+  const email = (req.body.email || '').toLowerCase().trim();
+  const pin   = (req.body.pin   || '').trim();
+  if (!email || !pin) return res.status(400).json({ error: 'Email and PIN are required' });
 
-  const setting = db.prepare("SELECT value FROM settings WHERE key='hm_pin'").get();
-  if (!setting?.value) return res.status(401).json({ error: 'HM portal access is not yet configured. Ask your recruiter to set an HM PIN in Settings.' });
+  const now   = new Date().toISOString();
+  const token = db.prepare(
+    'SELECT * FROM hm_magic_tokens WHERE email=? AND pin=? AND used=0 AND expires_at > ?'
+  ).get(email, pin, now);
+  if (!token) return res.status(401).json({ error: 'Invalid or expired PIN' });
 
-  if (pin.trim() !== setting.value) return res.status(401).json({ error: 'Incorrect PIN' });
+  db.prepare('UPDATE hm_magic_tokens SET used=1 WHERE id=?').run(token.id);
 
-  const jwtToken = jwt.sign({ role: 'hm' }, SECRET, { expiresIn: '30d' });
+  const user = db.prepare('SELECT id, name, email FROM hm_users WHERE email=?').get(email);
+  if (!user) return res.status(404).json({ error: 'HM user not found' });
+
+  const jwtToken = jwt.sign(
+    { role: 'hm', id: user.id, name: user.name, email: user.email },
+    SECRET,
+    { expiresIn: '30d' }
+  );
   res.cookie('gb_hm_token', jwtToken, HM_COOKIE_OPTS);
   res.json({ success: true });
 });
