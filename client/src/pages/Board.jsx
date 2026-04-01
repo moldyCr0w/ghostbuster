@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { localToday } from '../utils/dates';
 import CandidateModal from '../components/CandidateModal';
@@ -143,6 +144,10 @@ export default function Board() {
   const [reqFilter, setReqFilter]   = useState('');
   const [movingId, setMovingId]     = useState(null); // optimistic: currently being moved
 
+  const location   = useLocation();
+  const navigate   = useNavigate();
+  const handledRef = useRef(null); // prevent double-open on re-renders
+
   const load = useCallback(async () => {
     const [s, c, r] = await Promise.all([
       api.getStages(),
@@ -156,6 +161,21 @@ export default function Board() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // When navigated here from a notification, auto-open that candidate's modal
+  useEffect(() => {
+    const candidateId = location.state?.openCandidateId;
+    if (!candidateId || handledRef.current === candidateId) return;
+    handledRef.current = candidateId;
+
+    // Clear location state so a page refresh doesn't re-open the modal
+    navigate('/board', { replace: true, state: {} });
+
+    // Load candidate by ID (works even if they're in a terminal stage)
+    api.getCandidate(candidateId).then(c => {
+      if (c && !c.error) setEditingCandidate(c);
+    });
+  }, [location.state?.openCandidateId, navigate]);
 
   /* ── Drag handlers ── */
   const handleDragStart = useCallback((e, candidateId) => {

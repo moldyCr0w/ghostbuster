@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { api } from './api';
 import Dashboard  from './pages/Dashboard';
@@ -15,6 +15,7 @@ import HMView     from './pages/HMView';
 function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen]                   = useState(false);
+  const navigate                          = useNavigate();
 
   const load = useCallback(async () => {
     const data = await api.getNotifications();
@@ -30,14 +31,19 @@ function NotificationBell() {
     if (!open) load(); // refresh list on open
   };
 
-  const handleMarkOne = async (id) => {
-    await api.markRead(id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n));
-  };
-
   const handleMarkAll = async () => {
     await api.markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
+  };
+
+  // Click a notification: mark read, close panel, open candidate on the Board
+  const handleNotificationClick = async (n) => {
+    if (!n.is_read) {
+      await api.markRead(n.id);
+      setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: 1 } : x));
+    }
+    setOpen(false);
+    navigate('/board', { state: { openCandidateId: n.candidate_id } });
   };
 
   function fmtShort(iso) {
@@ -83,11 +89,9 @@ function NotificationBell() {
                 {notifications.map(n => (
                   <div
                     key={n.id}
-                    onClick={() => !n.is_read && handleMarkOne(n.id)}
-                    className={`px-4 py-3 flex items-start gap-2.5 ${
-                      n.is_read
-                        ? 'opacity-50'
-                        : 'hover:bg-slate-700 cursor-pointer'
+                    onClick={() => handleNotificationClick(n)}
+                    className={`px-4 py-3 flex items-start gap-2.5 cursor-pointer hover:bg-slate-700 transition-colors ${
+                      n.is_read ? 'opacity-50' : ''
                     }`}
                   >
                     <span className="text-base shrink-0 mt-0.5">
@@ -103,8 +107,9 @@ function NotificationBell() {
                           : 'Declined by HM'}
                         {n.req_title ? ` · ${n.req_title}` : ''}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-400 mt-0.5">
                         {fmtShort(n.created_at)}
+                        <span className="ml-2 text-slate-500">→ Open profile</span>
                       </p>
                     </div>
                     {!n.is_read && (
