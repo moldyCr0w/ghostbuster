@@ -1,0 +1,29 @@
+# Dependencies (reinstalled inside Docker)
+node_modules/
+client/node_modules/
+
+# Built output (rebuilt inside Docker)
+client/dist/
+
+# Local data — never bake into the image
+*.db
+*.db-shm
+*.db-wal
+uploads/
+
+# Secrets / env
+.env
+.env.*
+
+# Dev tooling
+.claude/
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+# Git
+.git/
+.gitignore

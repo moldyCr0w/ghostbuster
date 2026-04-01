@@ -1,7 +1,16 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs   = require('fs');
 
-const db = new Database(path.join(__dirname, '..', 'ghostbuster.db'));
+// In production (Railway) DB_PATH points to the persistent volume.
+// Locally it falls back to the repo root.
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'ghostbuster.db');
+
+// Make sure the parent directory exists (important on first deploy)
+const dbDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+
+const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -174,5 +183,15 @@ if (!hmReviewStageExists) {
     "INSERT OR IGNORE INTO stages (name, order_index, color, is_terminal, is_hire, is_hm_review) VALUES (?, ?, '#F97316', 0, 0, 1)"
   ).run('HM Review', insertAt);
 }
+
+// Settings table (key/value store)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
+  `);
+} catch (_) {}
 
 module.exports = db;

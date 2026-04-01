@@ -52,10 +52,18 @@ export default function Settings() {
   const [userError, setUserError]   = useState('');
   const [pinInfo, setPinInfo]       = useState(null); // { name, pin } for display after creation
 
+  // ── HM PIN state ─────────────────────────────────────────────
+  const [hmPinSet, setHmPinSet]       = useState(false);
+  const [hmPinInput, setHmPinInput]   = useState('');
+  const [hmPinError, setHmPinError]   = useState('');
+  const [hmPinSaved, setHmPinSaved]   = useState(false);
+  const [hmPinLoading, setHmPinLoading] = useState(false);
+
   const load = useCallback(async () => {
-    const [s, u] = await Promise.all([api.getStages(), api.getUsers()]);
+    const [s, u, settings] = await Promise.all([api.getStages(), api.getUsers(), api.getSettings()]);
     setStages(s);
     setUsers(u);
+    setHmPinSet(!!settings?.hm_pin_set);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -120,6 +128,29 @@ export default function Settings() {
   const handleDeleteUser = async (u) => {
     await api.deleteUser(u.id);
     load();
+  };
+
+  // ── HM PIN handlers ──────────────────────────────────────────
+  const handleSetHmPin = async (e) => {
+    e.preventDefault();
+    setHmPinError('');
+    setHmPinSaved(false);
+    setHmPinLoading(true);
+    const res = await api.setHmPin(hmPinInput);
+    setHmPinLoading(false);
+    if (res.error) { setHmPinError(res.error); return; }
+    setHmPinSet(true);
+    setHmPinInput('');
+    setHmPinSaved(true);
+    setTimeout(() => setHmPinSaved(false), 3000);
+  };
+
+  const handleRemoveHmPin = async () => {
+    setHmPinError('');
+    const res = await api.deleteHmPin();
+    if (res.error) { setHmPinError(res.error); return; }
+    setHmPinSet(false);
+    setHmPinInput('');
   };
 
   const move = async (stage, dir) => {
@@ -391,6 +422,66 @@ export default function Settings() {
               Add User
             </button>
           </form>
+        </div>
+      </div>
+
+      {/* ── HM Portal PIN ─────────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-800">HM Portal Access</h2>
+          <p className="text-slate-400 text-sm mt-0.5">
+            Set a PIN that hiring managers use to access the <code className="text-xs bg-slate-100 px-1 py-0.5 rounded">/hm</code> portal.
+            Until a PIN is set, the portal is locked.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          {/* Status badge */}
+          <div className="flex items-center gap-2 mb-4">
+            <div className={`w-2 h-2 rounded-full ${hmPinSet ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+            <span className="text-sm text-slate-600">
+              {hmPinSet ? 'A PIN is currently set — HM portal is active.' : 'No PIN set — HM portal is locked.'}
+            </span>
+          </div>
+
+          <form onSubmit={handleSetHmPin} className="flex items-end gap-3">
+            <div className="flex-1 max-w-xs">
+              <label className="block text-xs text-slate-500 mb-1">
+                {hmPinSet ? 'New PIN (to replace current)' : 'Set PIN'}
+              </label>
+              <input
+                type="password"
+                value={hmPinInput}
+                onChange={e => setHmPinInput(e.target.value)}
+                placeholder="Min. 4 characters"
+                minLength={4}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono tracking-widest"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={hmPinLoading || hmPinInput.trim().length < 4}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {hmPinLoading ? 'Saving…' : hmPinSet ? 'Update PIN' : 'Set PIN'}
+            </button>
+            {hmPinSet && (
+              <button
+                type="button"
+                onClick={handleRemoveHmPin}
+                className="px-4 py-2 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors"
+              >
+                Remove PIN
+              </button>
+            )}
+          </form>
+
+          {hmPinSaved && (
+            <p className="mt-3 text-sm text-emerald-600 font-medium">✓ PIN saved — HM portal is active.</p>
+          )}
+          {hmPinError && (
+            <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{hmPinError}</p>
+          )}
         </div>
       </div>
     </div>

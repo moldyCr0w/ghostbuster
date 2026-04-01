@@ -1,9 +1,10 @@
-const express = require('express');
-const router  = express.Router();
-const db      = require('../db');
-const multer  = require('multer');
-const path    = require('path');
-const fs      = require('fs');
+const express          = require('express');
+const router           = express.Router();
+const db               = require('../db');
+const multer           = require('multer');
+const path             = require('path');
+const fs               = require('fs');
+const requireHmAuth    = require('../middleware/requireHmAuth');
 
 /* ─── file upload setup ──────────────────────────────────────── */
 
@@ -372,8 +373,8 @@ router.put('/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// PATCH /api/candidates/:id/hm-note — append a note from the HM view (no auth required)
-router.patch('/:id/hm-note', (req, res) => {
+// PATCH /api/candidates/:id/hm-note — append a note from the HM view
+router.patch('/:id/hm-note', requireHmAuth, (req, res) => {
   const row = db.prepare('SELECT id, notes FROM candidates WHERE id=?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
 
@@ -390,9 +391,9 @@ router.patch('/:id/hm-note', (req, res) => {
   res.json({ success: true });
 });
 
-// PATCH /api/candidates/:id/hm-decision — HM forwards or declines (no auth required)
+// PATCH /api/candidates/:id/hm-decision — HM forwards or declines
 // Body: { decision: 'forward' | 'decline' }
-router.patch('/:id/hm-decision', (req, res) => {
+router.patch('/:id/hm-decision', requireHmAuth, (req, res) => {
   const { decision } = req.body || {};
   if (decision !== 'forward' && decision !== 'decline') {
     return res.status(400).json({ error: 'decision must be "forward" or "decline"' });
@@ -516,7 +517,7 @@ router.delete('/:id/resume', (req, res) => {
 /* ─── video screen notes ────────────────────────────────────── */
 
 // GET /api/candidates/:id/video-notes
-router.get('/:id/video-notes', (req, res) => {
+router.get('/:id/video-notes', requireHmAuth, (req, res) => {
   const rows = db.prepare(
     'SELECT * FROM video_screen_notes WHERE candidate_id = ? ORDER BY created_at DESC'
   ).all(req.params.id);

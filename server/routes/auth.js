@@ -83,4 +83,42 @@ router.post('/logout', (_req, res) => {
   res.json({ success: true });
 });
 
+/* ── HM portal auth ─────────────────────────────────────────── */
+
+const HM_COOKIE_OPTS = { httpOnly: true, sameSite: 'strict', maxAge: 30 * 24 * 60 * 60 * 1000 };
+
+// GET /api/auth/hm-me — check HM session
+router.get('/hm-me', (req, res) => {
+  const token = req.cookies?.gb_hm_token;
+  if (!token) return res.json({ authenticated: false });
+  try {
+    const payload = jwt.verify(token, SECRET);
+    if (payload.role !== 'hm') return res.json({ authenticated: false });
+    res.json({ authenticated: true });
+  } catch {
+    res.json({ authenticated: false });
+  }
+});
+
+// POST /api/auth/hm-login — validate static HM PIN, issue session cookie
+router.post('/hm-login', (req, res) => {
+  const { pin } = req.body || {};
+  if (!pin) return res.status(400).json({ error: 'PIN is required' });
+
+  const setting = db.prepare("SELECT value FROM settings WHERE key='hm_pin'").get();
+  if (!setting?.value) return res.status(401).json({ error: 'HM portal access is not yet configured. Ask your recruiter to set an HM PIN in Settings.' });
+
+  if (pin.trim() !== setting.value) return res.status(401).json({ error: 'Incorrect PIN' });
+
+  const jwtToken = jwt.sign({ role: 'hm' }, SECRET, { expiresIn: '30d' });
+  res.cookie('gb_hm_token', jwtToken, HM_COOKIE_OPTS);
+  res.json({ success: true });
+});
+
+// POST /api/auth/hm-logout
+router.post('/hm-logout', (_req, res) => {
+  res.clearCookie('gb_hm_token', { httpOnly: true, sameSite: 'strict' });
+  res.json({ success: true });
+});
+
 module.exports = router;

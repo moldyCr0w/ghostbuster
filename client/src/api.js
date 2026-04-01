@@ -83,4 +83,14 @@ export const api = {
   getUnreadCount:    ()    => req('/notifications/unread-count'),
   markRead:          (id)  => req(`/notifications/${id}/read`, { method: 'PATCH' }),
   markAllRead:       ()    => req('/notifications/read-all',   { method: 'PATCH' }),
+
+  // ── HM portal auth ────────────────────────────────────────────
+  hmMe:     ()      => req('/auth/hm-me'),
+  hmLogin:  (pin)   => req('/auth/hm-login',  { method: 'POST', body: JSON.stringify({ pin }) }),
+  hmLogout: ()      => req('/auth/hm-logout', { method: 'POST' }),
+
+  // ── Settings ──────────────────────────────────────────────────
+  getSettings: ()    => req('/settings'),
+  setHmPin:    (pin) => req('/settings/hm-pin', { method: 'PUT',    body: JSON.stringify({ pin }) }),
+  deleteHmPin: ()    => req('/settings/hm-pin', { method: 'DELETE' }),
 };

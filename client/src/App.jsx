@@ -10,6 +10,7 @@ import Board      from './pages/Board';
 import Settings   from './pages/Settings';
 import Login      from './pages/Login';
 import HMView     from './pages/HMView';
+import HMLogin    from './pages/HMLogin';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -220,8 +221,9 @@ export default function App() {
     <AuthProvider>
       <Routes>
         {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/hm"    element={<HMView />} />
+        <Route path="/login"    element={<Login />} />
+        <Route path="/hm/login" element={<HMLogin onAuthenticated={() => { window.location.href = '/hm'; }} />} />
+        <Route path="/hm"       element={<HMView />} />
 
         {/* Everything else is protected */}
         <Route

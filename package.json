@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Hiring funnel next-step reminder tool",
   "scripts": {
+    "start": "node server/index.js",
     "dev": "concurrently \"nodemon server/index.js\" \"cd client && npm run dev\"",
     "server": "nodemon server/index.js",
     "install:all": "npm install && cd client && npm install"

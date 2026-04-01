@@ -519,11 +519,30 @@ export default function HMView() {
   const [stages, setStages]           = useState([]);
   const [candidates, setCandidates]   = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [authed, setAuthed]           = useState(null); // null=checking, true=ok
   const [hmFilter, setHmFilter]       = useState('');
   const [selectedReq, setSelectedReq] = useState('all');
   const [drawerCandidate, setDrawerCandidate] = useState(null);
   const [toast, setToast]             = useState(null);
   const actionQueueRef                = useRef(null);
+
+  // Check HM session on mount — redirect to login if not authenticated
+  useEffect(() => {
+    api.hmMe().then(res => {
+      if (res.authenticated) {
+        setAuthed(true);
+      } else {
+        window.location.href = '/hm/login';
+      }
+    }).catch(() => {
+      window.location.href = '/hm/login';
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    await api.hmLogout();
+    window.location.href = '/hm/login';
+  };
 
   const load = useCallback(async () => {
     const [r, s, c] = await Promise.all([api.getReqs(), api.getStages(), api.getCandidates()]);
@@ -533,7 +552,7 @@ export default function HMView() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (authed) load(); }, [authed, load]);
 
   const handleDecision = useCallback(async (candidateId, decision) => {
     setToast({
@@ -545,6 +564,15 @@ export default function HMView() {
     setStages(s);
     setCandidates(c);
   }, []);
+
+  // Still checking session — show dark splash so there's no flash of content
+  if (authed === null) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-4xl animate-pulse">&#128123;</div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -675,9 +703,12 @@ export default function HMView() {
               )}
             </div>
           )}
-          <a href="/" className="text-xs text-slate-500 hover:text-white transition-colors">
-            Recruiter portal &rarr;
-          </a>
+          <button
+            onClick={handleLogout}
+            className="text-xs text-slate-400 hover:text-white transition-colors px-2.5 py-1 rounded-lg hover:bg-slate-700 border border-transparent hover:border-slate-600"
+          >
+            Sign out
+          </button>
         </div>
       </div>
 
