@@ -170,7 +170,7 @@ export default function Candidates() {
                       )}
                       {c.resume_path && (
                         <a
-                          href={`/uploads/${c.resume_path}`}
+                          href={`/api/candidates/${c.id}/resume`}
                           target="_blank"
                           rel="noopener noreferrer"
                           title={c.resume_original_name || 'Resume'}

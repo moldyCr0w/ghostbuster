@@ -88,7 +88,7 @@ function HMActionCard({ candidate, req, onDecision, onViewDetails }) {
       <div className="flex items-center gap-3 mb-4">
         {candidate.resume_path && (
           <a
-            href={`/uploads/${candidate.resume_path}`}
+            href={`/api/candidates/${candidate.id}/resume`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
@@ -171,7 +171,7 @@ function HMKanbanCard({ candidate, stage, onDecision, onClick }) {
       <div className="flex items-center gap-2 mt-1.5">
         {candidate.resume_path && (
           <a
-            href={`/uploads/${candidate.resume_path}`}
+            href={`/api/candidates/${candidate.id}/resume`}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
@@ -359,7 +359,7 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
           <div className="flex items-center gap-4 mt-3">
             {candidate.resume_path && (
               <a
-                href={`/uploads/${candidate.resume_path}`}
+                href={`/api/candidates/${candidate.id}/resume`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-blue-600 hover:text-blue-800 font-medium"

@@ -527,7 +527,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
               <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg mb-2">
                 <span className="text-base">📄</span>
                 <a
-                  href={`/uploads/${candidate.resume_path}`}
+                  href={`/api/candidates/${candidate.id}/resume`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 text-sm text-blue-600 hover:underline truncate"

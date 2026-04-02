@@ -476,6 +476,27 @@ router.delete('/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/candidates/:id/resume — serve resume inline (opens in browser tab)
+router.get('/:id/resume', (req, res) => {
+  const row = db.prepare('SELECT resume_path, resume_original_name FROM candidates WHERE id=?').get(req.params.id);
+  if (!row?.resume_path) return res.status(404).json({ error: 'No resume on file' });
+
+  const filePath = path.join(UPLOADS_DIR, row.resume_path);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+
+  const ext = path.extname(row.resume_path).toLowerCase();
+  const mime = {
+    '.pdf':  'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.doc':  'application/msword',
+  };
+
+  const originalName = row.resume_original_name || row.resume_path;
+  res.setHeader('Content-Type', mime[ext] || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename="${originalName}"`);
+  res.sendFile(filePath);
+});
+
 // POST /api/candidates/:id/resume — upload or replace resume file
 router.post('/:id/resume', upload.single('resume'), (req, res) => {
   const row = db.prepare('SELECT id, resume_path FROM candidates WHERE id=?').get(req.params.id);

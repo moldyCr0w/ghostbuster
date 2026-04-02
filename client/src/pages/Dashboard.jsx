@@ -123,7 +123,7 @@ function CandidateCard({ c, onEdit, onAcknowledge }) {
               )}
               {c.resume_path && (
                 <a
-                  href={`/uploads/${c.resume_path}`}
+                  href={`/api/candidates/${c.id}/resume`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-slate-500 hover:text-slate-800 text-xs font-medium flex items-center gap-1"
