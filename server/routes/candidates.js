@@ -387,7 +387,10 @@ router.put('/:id', requireAuth, (req, res) => {
       if (linkedReq?.hiring_manager) {
         const hmUser = db.prepare('SELECT name, email FROM hm_users WHERE name=?').get(linkedReq.hiring_manager);
         if (hmUser?.email) {
-          const appUrl = process.env.APP_URL || 'https://ghostbuster.up.railway.app';
+          // Railway auto-sets RAILWAY_PUBLIC_DOMAIN; fall back to APP_URL if manually configured
+          const appUrl = process.env.APP_URL
+            || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+            || 'https://ghostbuster.up.railway.app';
           sendMail({
             to:      hmUser.email,
             subject: `Candidate ready for your review: ${candName}`,
