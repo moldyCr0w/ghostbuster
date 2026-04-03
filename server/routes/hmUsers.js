@@ -28,6 +28,22 @@ router.post('/', requireAuth, (req, res) => {
   }
 });
 
+// PUT /api/hm-users/:id — update an HM's name and/or email
+router.put('/:id', requireAuth, (req, res) => {
+  const { name, email } = req.body || {};
+  if (!name || !email) return res.status(400).json({ error: 'name and email are required' });
+  try {
+    db.prepare(
+      'UPDATE hm_users SET name=?, email=? WHERE id=?'
+    ).run(name.trim(), email.toLowerCase().trim(), req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    if (err.message.includes('UNIQUE'))
+      return res.status(400).json({ error: 'An HM with that email already exists' });
+    throw err;
+  }
+});
+
 // DELETE /api/hm-users/:id — remove an HM
 router.delete('/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM hm_users WHERE id=?').run(req.params.id);

@@ -57,6 +57,9 @@ export default function Settings() {
   const [hmUserForm, setHmUserForm]   = useState({ name: '', email: '' });
   const [hmUserError, setHmUserError] = useState('');
   const [hmPinInfo, setHmPinInfo]     = useState(null); // { name, pin, email } after adding HM
+  const [editingHmId, setEditingHmId] = useState(null);
+  const [editHmForm, setEditHmForm]   = useState({ name: '', email: '' });
+  const [editHmError, setEditHmError] = useState('');
 
   const load = useCallback(async () => {
     const [s, u, hm] = await Promise.all([api.getStages(), api.getUsers(), api.getHmUsers()]);
@@ -149,6 +152,21 @@ export default function Settings() {
 
   const handleDeleteHmUser = async (u) => {
     await api.deleteHmUser(u.id);
+    load();
+  };
+
+  const startEditHmUser = (u) => {
+    setEditingHmId(u.id);
+    setEditHmForm({ name: u.name, email: u.email });
+    setEditHmError('');
+  };
+
+  const handleUpdateHmUser = async (e) => {
+    e.preventDefault();
+    setEditHmError('');
+    const res = await api.updateHmUser(editingHmId, editHmForm);
+    if (res.error) { setEditHmError(res.error); return; }
+    setEditingHmId(null);
     load();
   };
 
@@ -470,17 +488,46 @@ export default function Settings() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {hmUsers.map(u => (
-                <li key={u.id} className="px-4 py-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium text-slate-800">{u.name}</span>
-                    <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteHmUser(u)}
-                    className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
-                  >
-                    Remove
-                  </button>
+                <li key={u.id} className="px-4 py-3">
+                  {editingHmId === u.id ? (
+                    <form onSubmit={handleUpdateHmUser} className="flex flex-wrap gap-2 items-center">
+                      <input
+                        required
+                        value={editHmForm.name}
+                        onChange={e => setEditHmForm(f => ({ ...f, name: e.target.value }))}
+                        className="w-36 border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        required
+                        type="email"
+                        value={editHmForm.email}
+                        onChange={e => setEditHmForm(f => ({ ...f, email: e.target.value }))}
+                        className="flex-1 min-w-40 border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {editHmError && <span className="w-full text-xs text-red-500">{editHmError}</span>}
+                      <button type="submit" className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+                      <button type="button" onClick={() => setEditingHmId(null)} className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200">Cancel</button>
+                    </form>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-slate-800">{u.name}</span>
+                        <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
+                      </div>
+                      <button
+                        onClick={() => startEditHmUser(u)}
+                        className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteHmUser(u)}
+                        className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

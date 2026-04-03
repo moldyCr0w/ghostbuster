@@ -93,5 +93,6 @@ export const api = {
   // ── HM users (admin) ──────────────────────────────────────────
   getHmUsers:   ()        => req('/hm-users'),
   createHmUser: (data)    => req('/hm-users',       { method: 'POST',   body: JSON.stringify(data) }),
+  updateHmUser: (id, data) => req(`/hm-users/${id}`, { method: 'PUT',   body: JSON.stringify(data) }),
   deleteHmUser: (id)      => req(`/hm-users/${id}`, { method: 'DELETE' }),
 };
