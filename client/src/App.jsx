@@ -8,6 +8,7 @@ import Reqs       from './pages/Reqs';
 import Pipeline   from './pages/Pipeline';
 import Board      from './pages/Board';
 import Settings   from './pages/Settings';
+import Stats      from './pages/Stats';
 import Login      from './pages/Login';
 import HMView     from './pages/HMView';
 import HMLogin    from './pages/HMLogin';
@@ -162,6 +163,7 @@ function AppShell() {
           <NavLink to="/board"          className={navItem}>🗂️ Board</NavLink>
           <NavLink to="/candidates"     className={navItem}>👥 Candidates</NavLink>
           <NavLink to="/reqs"           className={navItem}>📋 Requisitions</NavLink>
+          <NavLink to="/stats"          className={navItem}>📈 Stats</NavLink>
           <NavLink to="/settings"       className={navItem}>⚙️ Settings</NavLink>
           <div className="pt-1">
             <NotificationBell />
@@ -191,6 +193,7 @@ function AppShell() {
           <Route path="/board"      element={<Board />}      />
           <Route path="/candidates" element={<Candidates />} />
           <Route path="/reqs"       element={<Reqs />}       />
+          <Route path="/stats"      element={<Stats />}      />
           <Route path="/settings"   element={<Settings />}   />
           <Route path="*"           element={<Navigate to="/" replace />} />
         </Routes>

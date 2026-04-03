@@ -24,6 +24,7 @@ app.use('/api/reqs',          require('./routes/reqs'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/settings',      require('./routes/settings'));
 app.use('/api/hm-users',      require('./routes/hmUsers'));
+app.use('/api/stats',         require('./routes/stats'));
 
 // Serve the built React app whenever the dist folder exists.
 // Works in production (Railway) without requiring NODE_ENV to be set.

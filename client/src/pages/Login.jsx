@@ -135,6 +135,10 @@ export default function Login() {
           )}
         </div>
       </div>
+      <p className="mt-6 text-center text-xs text-slate-400">
+        Are you a Hiring Manager?{' '}
+        <a href="/hm/login" className="text-blue-600 hover:underline font-medium">Sign in here →</a>
+      </p>
     </div>
   );
 }

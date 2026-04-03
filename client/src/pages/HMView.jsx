@@ -532,7 +532,10 @@ export default function HMView() {
     api.hmMe().then(res => {
       if (res.authenticated) {
         setAuthed(true);
-        if (res.name) setHmName(res.name);
+        if (res.name) {
+          setHmName(res.name);
+          setHmFilter(res.name);
+        }
       } else {
         window.location.href = '/hm/login';
       }
