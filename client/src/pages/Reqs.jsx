@@ -17,6 +17,8 @@ export default function Reqs() {
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(true);
+  const [users, setUsers]       = useState([]);   // recruiters (also sourcers)
+  const [hmUsers, setHmUsers]   = useState([]);   // hiring managers
 
   const load = useCallback(async () => {
     setReqs(await api.getReqs());
@@ -24,6 +26,12 @@ export default function Reqs() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load user lists for dropdowns
+  useEffect(() => {
+    api.getUsers().then(setUsers).catch(() => {});
+    api.getHmUsers().then(setHmUsers).catch(() => {});
+  }, []);
 
   const set    = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
   const setEdit= (field) => (e) => setEditForm(f => ({ ...f, [field]: e.target.value }));
@@ -133,21 +141,29 @@ export default function Reqs() {
                           </div>
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">Hiring Manager</label>
-                            <input
+                            <select
                               value={editForm.hiring_manager}
                               onChange={setEdit('hiring_manager')}
-                              placeholder="First Last"
-                              className="w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                              className="w-44 border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">— Select —</option>
+                              {hmUsers.map(u => (
+                                <option key={u.id} value={u.name}>{u.name}</option>
+                              ))}
+                            </select>
                           </div>
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">Recruiter</label>
-                            <input
+                            <select
                               value={editForm.recruiter}
                               onChange={setEdit('recruiter')}
-                              placeholder="First Last"
-                              className="w-36 border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                              className="w-44 border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">— Select —</option>
+                              {users.map(u => (
+                                <option key={u.id} value={u.name}>{u.name}</option>
+                              ))}
+                            </select>
                           </div>
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">Status</label>
@@ -268,21 +284,29 @@ export default function Reqs() {
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Hiring Manager</label>
-            <input
+            <select
               value={form.hiring_manager}
               onChange={set('hiring_manager')}
-              placeholder="First Last"
-              className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              className="w-44 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select —</option>
+              {hmUsers.map(u => (
+                <option key={u.id} value={u.name}>{u.name}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-slate-500 mb-1">Recruiter</label>
-            <input
+            <select
               value={form.recruiter}
               onChange={set('recruiter')}
-              placeholder="First Last"
-              className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+              className="w-44 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select —</option>
+              {users.map(u => (
+                <option key={u.id} value={u.name}>{u.name}</option>
+              ))}
+            </select>
           </div>
           <div className="flex-1 min-w-48">
             <label className="block text-xs text-slate-500 mb-1">Scorecard</label>

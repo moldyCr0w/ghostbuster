@@ -9,7 +9,6 @@ export default function Login() {
   const [step, setStep]   = useState('email'); // 'email' | 'pin'
   const [email, setEmail] = useState('');
   const [pin, setPin]     = useState('');
-  const [devPin, setDevPin] = useState('');   // shown on-screen until email is wired up
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +24,6 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Something went wrong'); return; }
-      setDevPin(data.pin); // displayed until email delivery is wired up
       setStep('pin');
     } catch {
       setError('Could not reach the server');
@@ -97,19 +95,10 @@ export default function Login() {
             </>
           ) : (
             <>
-              <h2 className="text-base font-semibold text-slate-700 mb-1">Enter your PIN</h2>
-              <p className="text-slate-400 text-sm mb-2">
-                A 6-digit PIN was generated for <strong className="text-slate-600">{email}</strong>.
+              <h2 className="text-base font-semibold text-slate-700 mb-1">Check your email</h2>
+              <p className="text-slate-400 text-sm mb-5">
+                We sent a 6-digit PIN to <strong className="text-slate-600">{email}</strong>. It expires in 10 minutes.
               </p>
-
-              {/* Dev mode: show the PIN on screen until email is wired up */}
-              {devPin && (
-                <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-xs font-medium text-amber-700 mb-0.5">Dev mode — PIN delivered here</p>
-                  <p className="text-2xl font-mono font-bold tracking-widest text-amber-800">{devPin}</p>
-                  <p className="text-xs text-amber-600 mt-1">Expires in 10 minutes. In production this would be emailed.</p>
-                </div>
-              )}
 
               <form onSubmit={verifyPin} className="space-y-4">
                 <div>
@@ -136,7 +125,7 @@ export default function Login() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setStep('email'); setPin(''); setDevPin(''); setError(''); }}
+                  onClick={() => { setStep('email'); setPin(''); setError(''); }}
                   className="w-full text-xs text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   ← Use a different email

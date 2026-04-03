@@ -1,7 +1,8 @@
-const express = require('express');
-const router  = express.Router();
-const jwt     = require('jsonwebtoken');
-const db      = require('../db');
+const express    = require('express');
+const router     = express.Router();
+const jwt        = require('jsonwebtoken');
+const db         = require('../db');
+const { sendMail } = require('../email');
 
 const SECRET      = process.env.JWT_SECRET || 'ghostbuster-dev-secret';
 const COOKIE_OPTS = { httpOnly: true, sameSite: 'strict', maxAge: 24 * 60 * 60 * 1000 };
@@ -44,9 +45,14 @@ router.post('/request', (req, res) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
   db.prepare('INSERT INTO magic_tokens (email, pin, expires_at) VALUES (?, ?, ?)').run(email, pin, expiresAt);
 
-  // In production, send this PIN by email.
-  // For now it is returned directly so admins can share it over Slack / verbally.
-  res.json({ pin, note: 'Share this PIN securely — it expires in 10 minutes' });
+  // Email the PIN to the user
+  sendMail({
+    to:      email,
+    subject: 'Your GhostBuster login PIN',
+    text:    `Your one-time PIN is: ${pin}\n\nIt expires in 10 minutes.`,
+  }).catch(err => console.error('[auth] Failed to send recruiter PIN email:', err));
+
+  res.json({ success: true });
 });
 
 // POST /api/auth/verify — validate PIN and issue a session cookie
@@ -115,7 +121,14 @@ router.post('/hm-request', (req, res) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   db.prepare('INSERT INTO hm_magic_tokens (email, pin, expires_at) VALUES (?, ?, ?)').run(email, pin, expiresAt);
 
-  res.json({ pin, note: 'Share this PIN securely — it expires in 10 minutes' });
+  // Email the PIN to the HM
+  sendMail({
+    to:      email,
+    subject: 'Your GhostBuster login PIN',
+    text:    `Your one-time PIN is: ${pin}\n\nIt expires in 10 minutes.`,
+  }).catch(err => console.error('[auth] Failed to send HM PIN email:', err));
+
+  res.json({ success: true });
 });
 
 // POST /api/auth/hm-login — validate OTP + email, issue 30-day session cookie

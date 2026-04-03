@@ -6,7 +6,6 @@ export default function HMLogin({ onAuthenticated }) {
   const [step, setStep]       = useState('email');
   const [email, setEmail]     = useState('');
   const [pin, setPin]         = useState('');
-  const [devPin, setDevPin]   = useState('');   // shown when server returns pin directly (no email service yet)
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -20,9 +19,6 @@ export default function HMLogin({ onAuthenticated }) {
       if (res.error) {
         setError(res.error);
       } else {
-        // In production the PIN would be emailed. For now the server returns it directly
-        // so recruiters can share it over Slack / verbally.
-        if (res.pin) setDevPin(res.pin);
         setStep('pin');
       }
     } catch {
@@ -104,22 +100,12 @@ export default function HMLogin({ onAuthenticated }) {
           ) : (
             /* ── Step 2: enter PIN ── */
             <>
-              <h2 className="text-base font-semibold text-white mb-1">Enter your PIN</h2>
-              <p className="text-slate-400 text-sm mb-2">
-                A 6-digit PIN was generated for{' '}
+              <h2 className="text-base font-semibold text-white mb-1">Check your email</h2>
+              <p className="text-slate-400 text-sm mb-5">
+                We sent a 6-digit PIN to{' '}
                 <span className="text-slate-200 font-medium">{email}</span>.
+                It expires in 10 minutes.
               </p>
-              <p className="text-slate-500 text-xs mb-5">
-                Your recruiter will share it with you — it expires in 10 minutes.
-              </p>
-
-              {/* Dev/demo callout: PIN displayed inline since there's no email service yet */}
-              {devPin && (
-                <div className="mb-5 p-3 bg-amber-900/40 border border-amber-700 rounded-lg">
-                  <p className="text-xs text-amber-400 font-medium mb-1">One-time PIN (share securely)</p>
-                  <p className="text-2xl font-mono font-bold tracking-widest text-amber-300">{devPin}</p>
-                </div>
-              )}
 
               <form onSubmit={handleVerifyPin} className="space-y-4">
                 <div>
@@ -156,7 +142,7 @@ export default function HMLogin({ onAuthenticated }) {
 
                 <button
                   type="button"
-                  onClick={() => { setStep('email'); setPin(''); setDevPin(''); setError(''); }}
+                  onClick={() => { setStep('email'); setPin(''); setError(''); }}
                   className="w-full py-2 text-slate-500 text-xs hover:text-slate-300 transition-colors"
                 >
                   ← Use a different email

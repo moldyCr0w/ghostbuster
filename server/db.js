@@ -136,6 +136,12 @@ db.exec(`
   try { db.exec(`ALTER TABLE stages ADD COLUMN ${col}`); } catch (_) {}
 });
 
+// candidate_reqs migrations
+try { db.exec('ALTER TABLE candidate_reqs ADD COLUMN sourced_by INTEGER REFERENCES users(id)'); } catch (_) {}
+
+// notifications migrations
+try { db.exec('ALTER TABLE notifications ADD COLUMN target_user_id INTEGER'); } catch (_) {}
+
 // Back-fill first_name from name for any existing rows
 db.exec(`
   UPDATE candidates

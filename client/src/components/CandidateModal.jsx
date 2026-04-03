@@ -28,9 +28,11 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     notes:            '',
     hired_for_req_id: '',
     contact_date:     todayStr(),
+    sourced_by:       '',
   });
   const [reqs, setReqs]               = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [allUsers, setAllUsers]       = useState([]);  // for sourcer dropdown
   const [resumeFile, setResumeFile]   = useState(null);   // new file chosen by user
   const [removeResume, setRemoveResume] = useState(false); // user wants to delete existing
   const [parsing, setParsing]         = useState(false);  // resume parsing in-flight
@@ -54,6 +56,8 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
 
   useEffect(() => {
     if (candidate) {
+      // sourced_by is on the junction row — take from first linked req (all share same sourcer)
+      const existingSourcer = (candidate.reqs || []).find(r => r.sourced_by)?.sourced_by ?? '';
       setForm({
         first_name:       candidate.first_name       ?? '',
         last_name:        candidate.last_name        ?? '',
@@ -63,12 +67,14 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
         wd_url:           candidate.wd_url           ?? '',
         notes:            candidate.notes            ?? '',
         hired_for_req_id: candidate.hired_for_req_id ?? '',
+        sourced_by:       existingSourcer,
       });
       setSelectedIds((candidate.reqs || []).map(r => r.id));
     }
   }, [candidate]); // eslint-disable-line
 
   useEffect(() => { api.getReqs().then(setReqs); }, []);
+  useEffect(() => { api.getUsers().then(setAllUsers).catch(() => {}); }, []);
 
   // Load video notes when editing
   useEffect(() => {
@@ -181,6 +187,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       stage_id:         hmReviewStage.id,
       hired_for_req_id: null,
       req_ids:          selectedIds,
+      sourced_by:       form.sourced_by ? Number(form.sourced_by) : null,
       _resumeFile:      resumeFile,
       _removeResume:    removeResume,
     });
@@ -196,6 +203,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       stage_id:         Number(form.stage_id),
       hired_for_req_id: isHireStage && form.hired_for_req_id ? Number(form.hired_for_req_id) : null,
       req_ids:          selectedIds,
+      sourced_by:       form.sourced_by ? Number(form.sourced_by) : null,
       _resumeFile:      resumeFile,
       _removeResume:    removeResume,
     });
@@ -373,6 +381,24 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
               </span>
             </div>
           )}
+
+          {/* Sourcer */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">Sourcer</label>
+            <select
+              value={form.sourced_by}
+              onChange={set('sourced_by')}
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— Select sourcer —</option>
+              {allUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              The sourcer receives HM decision notifications for this candidate.
+            </p>
+          </div>
 
           {/* Requisitions */}
           <div>

@@ -246,9 +246,11 @@ export default function Board() {
 
   const today = localToday();
 
-  // Active (non-terminal) stages as columns, in order
+  // All stages except the "Hired" stage as columns, in order
+  // This shows active stages + "Rejected / Closed" (declined) but hides "Hired"
+  const hiredStageId = stages.find(s => s.is_hire)?.id;
   const columns = stages
-    .filter(s => !s.is_terminal)
+    .filter(s => !(s.is_terminal && s.is_hire))
     .sort((a, b) => a.order_index - b.order_index);
 
   // Apply req filter
@@ -256,8 +258,8 @@ export default function Board() {
     ? candidates.filter(c => c.reqs?.some(r => String(r.id) === reqFilter))
     : candidates;
 
-  // Non-terminal candidates only on the board (terminal ones aren't moveable)
-  const activeCandidates = visibleCandidates.filter(c => !c.is_terminal);
+  // Exclude hired candidates — declined ones still show on the board
+  const activeCandidates = visibleCandidates.filter(c => c.stage_id !== hiredStageId);
 
   // Build stage → candidate list
   const byStage = {};
@@ -266,9 +268,10 @@ export default function Board() {
     if (byStage[c.stage_id]) byStage[c.stage_id].push(c);
   }
 
-  // Summary counts
-  const totalActive  = activeCandidates.length;
-  const totalOverdue = activeCandidates.filter(
+  // Summary counts (exclude terminal candidates from active/overdue tallies)
+  const nonTerminal  = activeCandidates.filter(c => !c.is_terminal);
+  const totalActive  = nonTerminal.length;
+  const totalOverdue = nonTerminal.filter(
     c => c.next_step_due && c.next_step_due < today
   ).length;
 

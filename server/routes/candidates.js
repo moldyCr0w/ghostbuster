@@ -5,6 +5,8 @@ const multer           = require('multer');
 const path             = require('path');
 const fs               = require('fs');
 const requireHmAuth    = require('../middleware/requireHmAuth');
+const requireAuth      = require('../middleware/requireAuth');
+const { sendMail }     = require('../email');
 
 /* ─── file upload setup ──────────────────────────────────────── */
 
@@ -150,7 +152,7 @@ function fullName(row) {
 
 // Subquery that returns a candidate's linked reqs as a JSON array
 const REQS_SUB = `(
-  SELECT json_group_array(json_object('id', r.id, 'req_id', r.req_id, 'title', r.title))
+  SELECT json_group_array(json_object('id', r.id, 'req_id', r.req_id, 'title', r.title, 'sourced_by', cr.sourced_by))
   FROM   candidate_reqs cr
   JOIN   reqs r ON r.id = cr.req_id
   WHERE  cr.candidate_id = c.id
@@ -180,13 +182,13 @@ function parseRow(row) {
 }
 
 // Replace all req associations for a candidate
-function setReqs(candidateId, reqIds) {
+function setReqs(candidateId, reqIds, sourcedBy) {
   db.prepare('DELETE FROM candidate_reqs WHERE candidate_id=?').run(candidateId);
   if (reqIds && reqIds.length > 0) {
     const ins = db.prepare(
-      'INSERT OR IGNORE INTO candidate_reqs (candidate_id, req_id) VALUES (?, ?)'
+      'INSERT OR IGNORE INTO candidate_reqs (candidate_id, req_id, sourced_by) VALUES (?, ?, ?)'
     );
-    reqIds.forEach(rid => ins.run(candidateId, Number(rid)));
+    reqIds.forEach(rid => ins.run(candidateId, Number(rid), sourcedBy || null));
   }
 }
 
@@ -262,10 +264,10 @@ router.put('/:id/reqs', (req, res) => {
 });
 
 // POST /api/candidates
-router.post('/', (req, res) => {
+router.post('/', requireAuth, (req, res) => {
   const { first_name, last_name, email, stage_id,
           linkedin_url, wd_url, notes, req_ids, hired_for_req_id,
-          contact_date } = req.body;
+          contact_date, sourced_by } = req.body;
   if (!first_name || !stage_id) {
     return res.status(400).json({ error: 'first_name and stage_id are required' });
   }
@@ -308,7 +310,7 @@ router.post('/', (req, res) => {
     if (hireReqId) {
       db.prepare("UPDATE reqs SET status='filled' WHERE id=?").run(hireReqId);
     }
-    setReqs(id, req_ids || []);
+    setReqs(id, req_ids || [], sourced_by || req.user?.id);
     return id;
   });
 
@@ -316,9 +318,9 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/candidates/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requireAuth, (req, res) => {
   const { first_name, last_name, email, stage_id,
-          linkedin_url, wd_url, notes, req_ids, hired_for_req_id } = req.body;
+          linkedin_url, wd_url, notes, req_ids, hired_for_req_id, sourced_by } = req.body;
 
   const existing     = db.prepare('SELECT stage_id FROM candidates WHERE id=?').get(req.params.id);
   const stageChanged = existing && Number(existing.stage_id) !== Number(stage_id);
@@ -366,7 +368,7 @@ router.put('/:id', (req, res) => {
       db.prepare("UPDATE reqs SET status='filled' WHERE id=?").run(hireReqId);
     }
 
-    if (req_ids !== undefined) setReqs(req.params.id, req_ids);
+    if (req_ids !== undefined) setReqs(req.params.id, req_ids, sourced_by || req.user?.id);
   });
 
   tx();
@@ -433,7 +435,7 @@ router.patch('/:id/hm-decision', requireHmAuth, (req, res) => {
     WHERE id = ?
   `).run(targetStage.id, nextDue, req.params.id);
 
-  // Log a notification for recruiters
+  // Log a notification for the sourcer (recruiter who submitted the candidate)
   try {
     const cInfo = db.prepare(
       'SELECT first_name, last_name, name FROM candidates WHERE id=?'
@@ -441,25 +443,57 @@ router.patch('/:id/hm-decision', requireHmAuth, (req, res) => {
     const candName = [cInfo?.first_name, cInfo?.last_name].filter(Boolean).join(' ')
       || cInfo?.name || 'Unknown';
 
+    // Fetch linked req AND the sourced_by user
     const linkedReq = db.prepare(`
-      SELECT r.title FROM reqs r
+      SELECT r.title, cr.sourced_by
+      FROM reqs r
       JOIN candidate_reqs cr ON cr.req_id = r.id
       WHERE cr.candidate_id = ? LIMIT 1
     `).get(req.params.id);
 
     const stageName = db.prepare('SELECT name FROM stages WHERE id=?').get(targetStage.id)?.name;
 
+    // Determine target user: sourcer first, then fall back to req recruiter
+    let targetUserId = linkedReq?.sourced_by || null;
+    if (!targetUserId && linkedReq?.title) {
+      // Fallback: resolve req owner (recruiter field) to a user ID
+      const reqRow = db.prepare(`
+        SELECT u.id FROM users u
+        JOIN reqs r ON r.recruiter = u.name
+        JOIN candidate_reqs cr ON cr.req_id = r.id
+        WHERE cr.candidate_id = ? LIMIT 1
+      `).get(req.params.id);
+      targetUserId = reqRow?.id || null;
+    }
+
     db.prepare(`
-      INSERT INTO notifications (type, candidate_id, candidate_name, req_title, stage_name, decision)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO notifications (type, candidate_id, candidate_name, req_title, stage_name, decision, target_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       decision === 'forward' ? 'hm_forward' : 'hm_decline',
       req.params.id,
       candName,
       linkedReq?.title || null,
       stageName || null,
-      decision
+      decision,
+      targetUserId
     );
+
+    // Email the sourcer about the HM decision
+    if (targetUserId) {
+      const sourcer = db.prepare('SELECT name, email FROM users WHERE id=?').get(targetUserId);
+      if (sourcer?.email) {
+        const verb = decision === 'forward' ? 'forwarded' : 'declined';
+        sendMail({
+          to:      sourcer.email,
+          subject: `HM Decision: ${candName} — ${decision === 'forward' ? 'Forward' : 'Decline'}`,
+          text:    `Hi ${sourcer.name || 'there'},\n\n`
+                 + `A hiring manager has ${verb} ${candName}`
+                 + (linkedReq?.title ? ` for ${linkedReq.title}` : '')
+                 + `.\n\nLog in to GhostBuster to see the details.`,
+        }).catch(err => console.error('[candidates] Failed to email sourcer:', err));
+      }
+    }
   } catch (_) { /* notifications are best-effort — never block the response */ }
 
   res.json({ success: true, stage_id: targetStage.id });
