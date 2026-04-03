@@ -152,6 +152,10 @@ export default function HMLogin({ onAuthenticated }) {
           )}
         </div>
       </div>
+      <p className="mt-6 text-center text-xs text-slate-500">
+        Looking for the recruiter pipeline?{' '}
+        <a href="/login" className="text-blue-400 hover:underline font-medium">Sign in here →</a>
+      </p>
     </div>
   );
 }

@@ -17,6 +17,7 @@ export default function Candidates() {
   const [candidates, setCandidates] = useState([]);
   const [stages, setStages]         = useState([]);
   const [filter, setFilter]         = useState('all');
+  const [search, setSearch]         = useState('');
   const [modal, setModal]           = useState(false);
   const [editing, setEditing]       = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -30,9 +31,18 @@ export default function Candidates() {
 
   useEffect(() => { load(); }, [load]);
 
-  const visible = filter === 'all'
-    ? candidates
-    : candidates.filter(c => c.stage_id === Number(filter));
+  const q = search.trim().toLowerCase();
+  const visible = candidates
+    .filter(c => filter === 'all' || c.stage_id === Number(filter))
+    .filter(c => {
+      if (!q) return true;
+      return (
+        (c.display_name || c.first_name || c.name || '').toLowerCase().includes(q) ||
+        (c.email   || '').toLowerCase().includes(q) ||
+        (c.role    || '').toLowerCase().includes(q) ||
+        (c.company || '').toLowerCase().includes(q)
+      );
+    });
 
   const openAdd  = () => { setEditing(null); setModal(true); };
   const openEdit = (c) => { setEditing(c);  setModal(true); };
@@ -91,6 +101,17 @@ export default function Candidates() {
         </button>
       </div>
 
+      {/* Search bar */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name, role, company, or email…"
+          className="w-full max-w-md border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        />
+      </div>
+
       {/* Stage filter tabs */}
       <div className="flex flex-wrap gap-2 mb-5">
         <FilterBtn
@@ -113,8 +134,8 @@ export default function Candidates() {
       {visible.length === 0 ? (
         <div className="text-center py-20 text-slate-400">
           <div className="text-4xl mb-3">👥</div>
-          <p className="text-sm">No candidates here yet.</p>
-          {filter === 'all' && (
+          <p className="text-sm">{q ? `No candidates match "${search}".` : 'No candidates here yet.'}</p>
+          {filter === 'all' && !q && (
             <button onClick={openAdd} className="mt-4 text-blue-600 text-sm hover:underline">
               Add your first candidate →
             </button>

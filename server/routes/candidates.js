@@ -372,6 +372,35 @@ router.put('/:id', requireAuth, (req, res) => {
   });
 
   tx();
+
+  // Email the HM when a candidate is moved into an HM Review stage
+  if (stageChanged) {
+    const movedToStage = db.prepare('SELECT is_hm_review FROM stages WHERE id=?').get(stage_id);
+    if (movedToStage?.is_hm_review) {
+      // Get the candidate's name and linked req
+      const cand    = db.prepare('SELECT first_name, last_name, name, role FROM candidates WHERE id=?').get(req.params.id);
+      const candName = [cand?.first_name, cand?.last_name].filter(Boolean).join(' ') || cand?.name || 'A candidate';
+      const linkedReq = db.prepare(
+        'SELECT r.title, r.hiring_manager FROM reqs r JOIN candidate_reqs cr ON cr.req_id=r.id WHERE cr.candidate_id=? LIMIT 1'
+      ).get(req.params.id);
+
+      if (linkedReq?.hiring_manager) {
+        const hmUser = db.prepare('SELECT name, email FROM hm_users WHERE name=?').get(linkedReq.hiring_manager);
+        if (hmUser?.email) {
+          const appUrl = process.env.APP_URL || 'https://ghostbuster.up.railway.app';
+          sendMail({
+            to:      hmUser.email,
+            subject: `Candidate ready for your review: ${candName}`,
+            text:    `Hi ${hmUser.name || 'there'},\n\n`
+                   + `${candName}${cand?.role ? ` (${cand.role})` : ''} has been submitted for your review`
+                   + (linkedReq.title ? ` for the ${linkedReq.title} role` : '')
+                   + `.\n\nLog in to GhostBuster to review and make your decision:\n${appUrl}/hm/login\n\nThank you!`,
+          }).catch(err => console.error('[candidates] Failed to email HM on review:', err));
+        }
+      }
+    }
+  }
+
   res.json({ success: true });
 });
 

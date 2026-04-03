@@ -90,6 +90,9 @@ export const api = {
   hmLogin:   (email, pin)  => req('/auth/hm-login',   { method: 'POST', body: JSON.stringify({ email, pin }) }),
   hmLogout:  ()            => req('/auth/hm-logout',  { method: 'POST' }),
 
+  // ── Stats ─────────────────────────────────────────────────────
+  getStats: () => req('/stats'),
+
   // ── HM users (admin) ──────────────────────────────────────────
   getHmUsers:   ()        => req('/hm-users'),
   createHmUser: (data)    => req('/hm-users',       { method: 'POST',   body: JSON.stringify(data) }),
