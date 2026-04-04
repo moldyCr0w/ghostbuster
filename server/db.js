@@ -200,6 +200,29 @@ try {
   `);
 } catch (_) {}
 
+// Panelist qualification tags (recruiter-defined tag library)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS panelist_tags (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT    NOT NULL UNIQUE,
+      category   TEXT    NOT NULL DEFAULT 'other',
+      color      TEXT    NOT NULL DEFAULT '#6B7280',
+      created_at TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS panelists (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      name             TEXT    NOT NULL,
+      email            TEXT    NOT NULL UNIQUE,
+      title            TEXT,
+      qualifications   TEXT    NOT NULL DEFAULT '[]',
+      interview_levels TEXT    NOT NULL DEFAULT '[]',
+      created_at       TEXT    DEFAULT (datetime('now'))
+    );
+  `);
+} catch (_) {}
+
 // Individual HM user accounts (replaces shared PIN)
 try {
   db.exec(`

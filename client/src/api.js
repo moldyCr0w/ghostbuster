@@ -98,4 +98,22 @@ export const api = {
   createHmUser: (data)    => req('/hm-users',       { method: 'POST',   body: JSON.stringify(data) }),
   updateHmUser: (id, data) => req(`/hm-users/${id}`, { method: 'PUT',   body: JSON.stringify(data) }),
   deleteHmUser: (id)      => req(`/hm-users/${id}`, { method: 'DELETE' }),
+
+  // ── Google Calendar integration ────────────────────────────────
+  googleAuthStatus:     ()  => req('/google-auth/status'),
+  googleAuthUrl:        ()  => req('/google-auth/url'),
+  googleAuthDisconnect: ()  => req('/google-auth/disconnect', { method: 'DELETE' }),
+
+  // ── Panelist tags ──────────────────────────────────────────────
+  getPanelistTags:    ()         => req('/panelist-tags'),
+  createPanelistTag:  (data)     => req('/panelist-tags',       { method: 'POST',   body: JSON.stringify(data) }),
+  updatePanelistTag:  (id, data) => req(`/panelist-tags/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
+  deletePanelistTag:  (id)       => req(`/panelist-tags/${id}`, { method: 'DELETE' }),
+
+  // ── Panelists ──────────────────────────────────────────────────
+  getPanelists:    (params = {}) => req(`/panelists${params.tag_ids || params.level ? `?${new URLSearchParams(params)}` : ''}`),
+  getPanelist:     (id)          => req(`/panelists/${id}`),
+  createPanelist:  (data)        => req('/panelists',       { method: 'POST',   body: JSON.stringify(data) }),
+  updatePanelist:  (id, data)    => req(`/panelists/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
+  deletePanelist:  (id)          => req(`/panelists/${id}`, { method: 'DELETE' }),
 };

@@ -23,8 +23,11 @@ app.use('/api/stages',        require('./routes/stages'));
 app.use('/api/reqs',          require('./routes/reqs'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/settings',      require('./routes/settings'));
-app.use('/api/hm-users',      require('./routes/hmUsers'));
-app.use('/api/stats',         require('./routes/stats'));
+app.use('/api/hm-users',       require('./routes/hmUsers'));
+app.use('/api/stats',          require('./routes/stats'));
+app.use('/api/google-auth',    require('./routes/googleAuth'));
+app.use('/api/panelist-tags',  require('./routes/panelistTags'));
+app.use('/api/panelists',      require('./routes/panelists'));
 
 // Serve the built React app whenever the dist folder exists.
 // Works in production (Railway) without requiring NODE_ENV to be set.
