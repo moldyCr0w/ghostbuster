@@ -277,12 +277,14 @@ function HMKanbanColumn({ stage, candidates, onDecision, onCardClick }) {
 
 /* ── Candidate detail drawer (slide-out from right) ───────────── */
 function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
-  const [videoNotes, setVideoNotes] = useState(null);
-  const [note, setNote]             = useState('');
-  const [authorName, setAuthorName] = useState('');
-  const [saving, setSaving]         = useState(false);
-  const [saved, setSaved]           = useState(false);
-  const [deciding, setDeciding]     = useState(null);
+  const [videoNotes, setVideoNotes]           = useState(null);
+  const [note, setNote]                       = useState('');
+  const [authorName, setAuthorName]           = useState('');
+  const [saving, setSaving]                   = useState(false);
+  const [saved, setSaved]                     = useState(false);
+  const [deciding, setDeciding]               = useState(null);
+  const [scorecard, setScorecard]             = useState(null); // null=loading, []=none, [{...}]=loaded
+  const [scorecardReqTitle, setScorecardReqTitle] = useState('');
 
   const stage = stages.find(s => s.id === candidate.stage_id);
   const isHmReview = !!stage?.is_hm_review;
@@ -291,6 +293,28 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
     api.getVideoNotes(candidate.id)
       .then(data => setVideoNotes(Array.isArray(data) ? data : []))
       .catch(() => setVideoNotes([]));
+  }, [candidate.id]);
+
+  // Load scorecard — find the first linked req that has scores
+  useEffect(() => {
+    setScorecard(null);
+    const reqs = candidate.reqs || [];
+    if (reqs.length === 0) { setScorecard([]); return; }
+    let cancelled = false;
+    (async () => {
+      for (const r of reqs) {
+        const data = await api.getCandidateScores(candidate.id, r.id).catch(() => []);
+        if (cancelled) return;
+        const scored = Array.isArray(data) ? data.filter(d => d.score != null) : [];
+        if (scored.length > 0) {
+          setScorecard(scored);
+          setScorecardReqTitle(r.title || r.req_id || '');
+          return;
+        }
+      }
+      setScorecard([]);
+    })();
+    return () => { cancelled = true; };
   }, [candidate.id]);
 
   const handleAddNote = async (e) => {
@@ -455,6 +479,55 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
               </pre>
             ) : (
               <p className="text-sm text-slate-400 italic">No recruiter notes yet.</p>
+            )}
+          </div>
+
+          {/* Scorecard */}
+          <div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Scorecard</p>
+              {scorecardReqTitle && (
+                <span className="text-xs text-slate-400">{scorecardReqTitle}</span>
+              )}
+            </div>
+            {scorecard === null ? (
+              <p className="text-sm text-slate-400 italic">Loading…</p>
+            ) : scorecard.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No scores recorded yet.</p>
+            ) : (
+              <div className="bg-slate-50 border border-slate-100 rounded-lg p-4 space-y-3">
+                {scorecard.map(row => {
+                  const score = row.score || 0;
+                  const pipColor = score >= 4 ? '#10B981' : score >= 3 ? '#3B82F6' : '#F59E0B';
+                  const avg = scorecard.reduce((s, r) => s + (r.score || 0), 0) / scorecard.length;
+                  return (
+                    <div key={row.criterion_id} className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-slate-700">{row.criterion_name}</span>
+                        {row.scored_by && (
+                          <span className="text-xs text-slate-400 ml-1.5">· {row.scored_by}</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        {[1,2,3,4,5].map(n => (
+                          <span
+                            key={n}
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: n <= score ? pipColor : '#E2E8F0' }}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-xs font-semibold text-slate-600 w-4 text-right shrink-0">{score}</span>
+                    </div>
+                  );
+                })}
+                <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Overall avg</span>
+                  <span className="text-sm font-bold text-slate-700">
+                    {(scorecard.reduce((s, r) => s + (r.score || 0), 0) / scorecard.length).toFixed(1)} / 5
+                  </span>
+                </div>
+              </div>
             )}
           </div>
 
