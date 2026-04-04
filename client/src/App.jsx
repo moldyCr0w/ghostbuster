@@ -12,6 +12,7 @@ import Stats      from './pages/Stats';
 import Login      from './pages/Login';
 import HMView     from './pages/HMView';
 import HMLogin    from './pages/HMLogin';
+import Schedule   from './pages/Schedule';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -225,8 +226,9 @@ export default function App() {
       <Routes>
         {/* Public routes */}
         <Route path="/login"    element={<Login />} />
-        <Route path="/hm/login" element={<HMLogin onAuthenticated={() => { window.location.href = '/hm'; }} />} />
-        <Route path="/hm"       element={<HMView />} />
+        <Route path="/hm/login"       element={<HMLogin onAuthenticated={() => { window.location.href = '/hm'; }} />} />
+        <Route path="/hm"             element={<HMView />} />
+        <Route path="/schedule/:token" element={<Schedule />} />
 
         {/* Everything else is protected */}
         <Route
