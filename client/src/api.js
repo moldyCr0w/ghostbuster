@@ -116,4 +116,10 @@ export const api = {
   createPanelist:  (data)        => req('/panelists',       { method: 'POST',   body: JSON.stringify(data) }),
   updatePanelist:  (id, data)    => req(`/panelists/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
   deletePanelist:  (id)          => req(`/panelists/${id}`, { method: 'DELETE' }),
+
+  // ── Scheduling ─────────────────────────────────────────────────
+  createScheduleLink: (data)        => req('/schedule',                   { method: 'POST', body: JSON.stringify(data) }),
+  getScheduleLinks:   (candId)      => req(`/schedule/candidate/${candId}`),
+  getScheduleInfo:    (tk)          => fetch(`/api/schedule/${tk}`).then(r => r.json()),
+  bookScheduleSlot:   (tk, data)    => fetch(`/api/schedule/${tk}/book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
 };

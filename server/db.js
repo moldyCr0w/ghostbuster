@@ -223,6 +223,35 @@ try {
   `);
 } catch (_) {}
 
+// Interview scheduling links
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schedule_links (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      token            TEXT    NOT NULL UNIQUE,
+      candidate_id     INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+      created_by       INTEGER REFERENCES users(id),
+      mode             TEXT    NOT NULL DEFAULT 'self-schedule',
+      status           TEXT    NOT NULL DEFAULT 'pending',
+      panelist_emails  TEXT    NOT NULL DEFAULT '[]',
+      duration_mins    INTEGER NOT NULL DEFAULT 60,
+      window_start     TEXT,
+      window_end       TEXT,
+      proposed_start   TEXT,
+      proposed_end     TEXT,
+      interview_title  TEXT,
+      event_id         TEXT,
+      event_start      TEXT,
+      event_end        TEXT,
+      meet_link        TEXT,
+      booked_by_name   TEXT,
+      booked_by_email  TEXT,
+      created_at       TEXT    DEFAULT (datetime('now')),
+      booked_at        TEXT
+    );
+  `);
+} catch (_) {}
+
 // Individual HM user accounts (replaces shared PIN)
 try {
   db.exec(`
