@@ -285,6 +285,10 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   }, [schedForm.panelist_emails, selectedIt, schedPanelists]); // eslint-disable-line
 
   // ── Schedule handler ──
+  // Round-robin mode: self-schedule + interview type selected →
+  //   send interview_type_id instead of panelist_emails; server assigns panel at booking time.
+  const isRoundRobin = schedMode === 'self-schedule' && !!selectedIt;
+
   const handleCreateScheduleLink = async () => {
     setSchedError('');
     setSchedLoading(true);
@@ -292,10 +296,19 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       const payload = {
         candidate_id:    candidate.id,
         mode:            schedMode,
-        panelist_emails: schedForm.panelist_emails,
         duration_mins:   schedForm.duration_mins,
         interview_title: schedForm.interview_title || selectedIt?.name || undefined,
       };
+
+      // For round-robin self-schedule, send interview_type_id — no manual panelists needed.
+      // For propose mode (or self-schedule without a type), send the manually selected panelists.
+      if (isRoundRobin) {
+        payload.interview_type_id = selectedIt.id;
+      } else {
+        payload.panelist_emails = schedForm.panelist_emails;
+        if (selectedIt) payload.interview_type_id = selectedIt.id; // for info/title fallback
+      }
+
       if (schedMode === 'self-schedule') {
         if (!schedForm.window_start || !schedForm.window_end) {
           setSchedError('Start and end dates are required.');
@@ -974,8 +987,20 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                       </div>
                     </div>
 
-                    {/* Panelists */}
-                    {schedPanelists.length > 0 && (
+                    {/* Panelists — round-robin info pill or manual checkboxes */}
+                    {isRoundRobin ? (
+                      // Round-robin: self-schedule + interview type → server auto-assigns panel
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
+                        <p className="text-xs font-semibold text-blue-700">Round-robin auto-assignment</p>
+                        <p className="text-xs text-blue-600 mt-0.5">
+                          {eligiblePanelists.length > 0
+                            ? <>{eligiblePanelists.length} eligible panelist{eligiblePanelists.length !== 1 ? 's' : ''} in pool · {selectedIt.min_panelists} will be assigned at booking</>
+                            : <span className="text-amber-600">No eligible panelists for this interview type yet.</span>
+                          }
+                        </p>
+                      </div>
+                    ) : schedPanelists.length > 0 && (
+                      // Manual selection: propose mode, or self-schedule without a type
                       <div>
                         <p className="text-xs text-slate-500 mb-1">
                           Panelists
@@ -1016,8 +1041,8 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                       </div>
                     )}
 
-                    {/* Composition warning */}
-                    {compositionWarning && (
+                    {/* Composition warning — only shown in manual mode */}
+                    {!isRoundRobin && compositionWarning && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                         <p className="text-xs text-amber-700">{compositionWarning}</p>
                       </div>
@@ -1063,7 +1088,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                       <button
                         type="button"
                         onClick={handleCreateScheduleLink}
-                        disabled={schedLoading || !!compositionWarning}
+                        disabled={schedLoading || (!isRoundRobin && !!compositionWarning)}
                         className="flex-1 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
                       >
                         {schedLoading ? 'Creating…' : schedMode === 'propose' ? 'Create Event' : 'Generate Link'}
