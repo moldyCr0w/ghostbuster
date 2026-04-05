@@ -38,20 +38,29 @@ router.post('/', requireAuth, async (req, res) => {
     let eventStart = proposed_start;
     let eventEnd   = proposedEnd;
 
-    // Build attendee list: panelists + candidate (if email available)
-    const attendees = [...panelist_emails];
-    if (candidate.email) attendees.push(candidate.email);
-
     try {
+      // 1. Panelist event — generates the Google Meet link
       const result = await createEvent({
         summary:        interview_title || `Interview: ${candidate.name}`,
         description:    `Interview for ${candidate.name}`,
         startTime:      proposed_start,
         endTime:        proposedEnd,
-        attendeeEmails: attendees,
+        attendeeEmails: panelist_emails,
       });
-      eventId   = result.eventId;
-      meetLink  = result.meetLink;
+      eventId  = result.eventId;
+      meetLink = result.meetLink;
+
+      // 2. Candidate event — separate invite reusing the same Meet link
+      if (candidate.email) {
+        await createEvent({
+          summary:          interview_title || `Interview: ${candidate.name}`,
+          description:      `Your interview with the team.`,
+          startTime:        proposed_start,
+          endTime:          proposedEnd,
+          attendeeEmails:   [candidate.email],
+          existingMeetLink: meetLink,
+        });
+      }
     } catch (err) {
       console.error('[schedule] createEvent failed:', err.message);
       // Still create the row even if Calendar fails
@@ -163,28 +172,38 @@ router.post('/:token/book', async (req, res) => {
     return res.status(400).json({ error: 'Slot is outside the scheduling window' });
   }
 
-  // Gather attendees: panelists + candidate email
-  const panelistEmails = JSON.parse(link.panelist_emails || '[]');
-  const attendees = [...panelistEmails];
-  if (candidate_email) attendees.push(candidate_email);
-
   // Get candidate info for the event
+  const panelistEmails = JSON.parse(link.panelist_emails || '[]');
   const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(link.candidate_id);
   const candName  = candidate_name || candidate?.name || 'Candidate';
+  const candEmail = candidate_email || candidate?.email || null;
 
   let eventId  = null;
   let meetLink = null;
 
   try {
+    // 1. Panelist event — generates the Google Meet link
     const result = await createEvent({
       summary:        link.interview_title || `Interview: ${candName}`,
       description:    `Interview for ${candName}`,
       startTime:      slot_start,
       endTime:        new Date(slotEnd).toISOString(),
-      attendeeEmails: attendees,
+      attendeeEmails: panelistEmails,
     });
     eventId  = result.eventId;
     meetLink = result.meetLink;
+
+    // 2. Candidate event — separate invite reusing the same Meet link
+    if (candEmail) {
+      await createEvent({
+        summary:          link.interview_title || `Interview: ${candName}`,
+        description:      `Your interview with the team.`,
+        startTime:        slot_start,
+        endTime:          new Date(slotEnd).toISOString(),
+        attendeeEmails:   [candEmail],
+        existingMeetLink: meetLink,
+      });
+    }
   } catch (err) {
     console.error('[schedule] createEvent failed on book:', err.message);
   }
