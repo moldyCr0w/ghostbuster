@@ -374,7 +374,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onBackdrop}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -769,11 +769,11 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Notes</label>
             <textarea
-              rows={3}
+              rows={6}
               value={form.notes}
               onChange={set('notes')}
               placeholder="Interview feedback, sourcing notes, etc."
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y min-h-[120px]"
             />
           </div>
 
@@ -792,7 +792,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
               <div className="border border-slate-200 rounded-lg overflow-hidden">
                 {/* Existing notes */}
                 {videoNotes.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
                     {videoNotes.map(vn => (
                       <div key={vn.id} className="px-3 py-2">
                         <p className="text-xs font-semibold text-slate-500 mb-0.5">
@@ -821,11 +821,11 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                     />
                     <textarea
                       autoFocus
-                      rows={3}
+                      rows={5}
                       value={videoNote}
                       onChange={e => setVideoNote(e.target.value)}
                       placeholder="Notes from the video screen…"
-                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y min-h-[100px]"
                     />
                     <div className="flex gap-2">
                       <button
