@@ -16,7 +16,10 @@ function DateCell({ dateStr }) {
 export default function Candidates() {
   const [candidates, setCandidates] = useState([]);
   const [stages, setStages]         = useState([]);
+  const [allUsers, setAllUsers]     = useState([]);
   const [filter, setFilter]         = useState('all');
+  const [reqFilter, setReqFilter]   = useState('all');
+  const [sourcerFilter, setSourcerFilter] = useState('all');
   const [search, setSearch]         = useState('');
   const [modal, setModal]           = useState(false);
   const [editing, setEditing]       = useState(null);
@@ -29,11 +32,26 @@ export default function Candidates() {
     setLoading(false);
   }, []);
 
+  useEffect(() => { api.getUsers().then(setAllUsers).catch(() => {}); }, []);
+
   useEffect(() => { load(); }, [load]);
+
+  // Derive unique reqs and sourcers from loaded candidates
+  const uniqueReqs = Array.from(
+    new Map(
+      candidates.flatMap(c => c.reqs || []).map(r => [r.id, r])
+    ).values()
+  ).sort((a, b) => (a.req_id || '').localeCompare(b.req_id || ''));
+
+  const uniqueSourcerIds = [...new Set(
+    candidates.flatMap(c => (c.reqs || []).map(r => r.sourced_by)).filter(Boolean)
+  )];
 
   const q = search.trim().toLowerCase();
   const visible = candidates
     .filter(c => filter === 'all' || c.stage_id === Number(filter))
+    .filter(c => reqFilter === 'all' || (c.reqs || []).some(r => r.id === Number(reqFilter)))
+    .filter(c => sourcerFilter === 'all' || (c.reqs || []).some(r => String(r.sourced_by) === sourcerFilter))
     .filter(c => {
       if (!q) return true;
       return (
@@ -101,15 +119,46 @@ export default function Candidates() {
         </button>
       </div>
 
-      {/* Search bar */}
-      <div className="mb-4">
+      {/* Search + dropdowns */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, role, company, or email…"
-          className="w-full max-w-md border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+          className="flex-1 min-w-[200px] max-w-md border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         />
+        <select
+          value={reqFilter}
+          onChange={e => setReqFilter(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-600"
+        >
+          <option value="all">All Requisitions</option>
+          {uniqueReqs.map(r => (
+            <option key={r.id} value={r.id}>{r.req_id}{r.title ? ` · ${r.title}` : ''}</option>
+          ))}
+        </select>
+        <select
+          value={sourcerFilter}
+          onChange={e => setSourcerFilter(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-600"
+        >
+          <option value="all">All Sourcers</option>
+          {uniqueSourcerIds.map(uid => {
+            const user = allUsers.find(u => u.id === uid);
+            return (
+              <option key={uid} value={uid}>{user ? user.name : `User #${uid}`}</option>
+            );
+          })}
+        </select>
+        {(reqFilter !== 'all' || sourcerFilter !== 'all') && (
+          <button
+            onClick={() => { setReqFilter('all'); setSourcerFilter('all'); }}
+            className="text-xs text-slate-400 hover:text-slate-600"
+          >
+            Clear filters ✕
+          </button>
+        )}
       </div>
 
       {/* Stage filter tabs */}
