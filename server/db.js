@@ -305,6 +305,11 @@ try {
   }
 } catch (_) {}
 
+// Add interview_type_id to schedule_links (links a link to a specific interview type for round-robin)
+try {
+  db.prepare('ALTER TABLE schedule_links ADD COLUMN interview_type_id INTEGER REFERENCES interview_types(id) ON DELETE SET NULL').run();
+} catch (_) {}
+
 // Backfill panelist interview_levels: collapse 5-tier → 2-tier (senior, staff_plus)
 try {
   const rows = db.prepare('SELECT id, interview_levels FROM panelists').all();
