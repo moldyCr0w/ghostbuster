@@ -228,15 +228,18 @@ router.post('/:id/acknowledge', (req, res) => {
 
   const { note, next_due } = req.body || {};
   const dueDate = next_due || bizDaysFromNow(5);
+  // Anchor the SLA from the activity date (if provided), not from now.
+  // Store as noon so the date is stable across timezones when parsed client-side.
+  const resetAt = next_due ? `${next_due} 12:00:00` : null;
 
   db.prepare(`
     UPDATE candidates
-    SET sla_reset_at  = datetime('now'),
+    SET sla_reset_at  = COALESCE(?, datetime('now')),
         next_step_due = ?,
         next_step     = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE next_step END,
         updated_at    = datetime('now')
     WHERE id = ?
-  `).run(dueDate, note, note, note, req.params.id);
+  `).run(resetAt, dueDate, note, note, note, req.params.id);
 
   res.json({ success: true });
 });
