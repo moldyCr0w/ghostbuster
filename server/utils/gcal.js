@@ -107,30 +107,52 @@ function generateSlots(timeMin, timeMax, durationMins, busyByCalendar) {
 }
 
 /**
- * Creates a Google Calendar event with a Meet link.
+ * Creates a Google Calendar event.
+ *
+ * When `existingMeetLink` is NOT provided (default), a new Google Meet
+ * conference is created and the generated link is returned.
+ *
+ * When `existingMeetLink` IS provided, no new conference is created —
+ * the link is embedded in the event description so the attendee can join
+ * the same meeting. This is used for the candidate's separate invite.
+ *
  * Returns { eventId, meetLink }
  */
-async function createEvent({ summary, description, startTime, endTime, attendeeEmails }) {
+async function createEvent({ summary, description, startTime, endTime, attendeeEmails, existingMeetLink = null }) {
   const auth = await getAuthClient();
   const calendar = google.calendar({ version: 'v3', auth });
 
+  // For a candidate-only event, embed the Meet link in the description
+  // rather than generating a new conference.
+  const bodyDescription = existingMeetLink
+    ? `${description ? description + '\n\n' : ''}Join Google Meet: ${existingMeetLink}`
+    : description;
+
+  const requestBody = {
+    summary,
+    description: bodyDescription,
+    start:     { dateTime: startTime, timeZone: 'UTC' },
+    end:       { dateTime: endTime,   timeZone: 'UTC' },
+    attendees: attendeeEmails.map(email => ({ email })),
+  };
+
+  if (!existingMeetLink) {
+    requestBody.conferenceData = {
+      createRequest: { requestId: `gb-${Date.now()}`, conferenceSolutionKey: { type: 'hangoutsMeet' } },
+    };
+  }
+
   const { data: event } = await calendar.events.insert({
     calendarId:            'primary',
-    conferenceDataVersion: 1,
+    conferenceDataVersion: existingMeetLink ? 0 : 1,
     sendUpdates:           'all',
-    requestBody: {
-      summary,
-      description,
-      start: { dateTime: startTime, timeZone: 'UTC' },
-      end:   { dateTime: endTime,   timeZone: 'UTC' },
-      attendees: attendeeEmails.map(email => ({ email })),
-      conferenceData: {
-        createRequest: { requestId: `gb-${Date.now()}`, conferenceSolutionKey: { type: 'hangoutsMeet' } },
-      },
-    },
+    requestBody,
   });
 
-  const meetLink = event.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri || null;
+  const meetLink = event.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri
+    ?? existingMeetLink
+    ?? null;
+
   return { eventId: event.id, meetLink };
 }
 
