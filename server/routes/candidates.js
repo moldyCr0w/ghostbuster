@@ -227,9 +227,9 @@ router.post('/:id/acknowledge', (req, res) => {
   if (!row) return res.status(404).json({ error: 'Not found' });
 
   const { note, next_due } = req.body || {};
-  const dueDate = next_due || bizDaysFromNow(5);
-  // Anchor the SLA from the activity date (if provided), not from now.
-  // Store as noon so the date is stable across timezones when parsed client-side.
+  // next_due is the activity/event date; next_step_due is 5 biz days after it
+  const dueDate = next_due ? bizDaysFrom(next_due, 5) : bizDaysFromNow(5);
+  // Anchor the SLA from the activity date, not from now.
   const resetAt = next_due ? `${next_due} 12:00:00` : null;
 
   db.prepare(`

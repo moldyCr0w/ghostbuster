@@ -23,7 +23,7 @@ function CandidateCard({ c, onEdit, onAcknowledge }) {
 
   const openLog = () => {
     setNote('');
-    setNextDue(bizDateStr(5));
+    setNextDue(localToday());
     setShowLog(true);
   };
 
@@ -182,7 +182,7 @@ function CandidateCard({ c, onEdit, onAcknowledge }) {
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Next check-in by
+                Activity / event date
               </label>
               <input
                 type="date"
