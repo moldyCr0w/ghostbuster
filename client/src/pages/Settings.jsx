@@ -9,14 +9,12 @@ const COLORS = [
   '#F97316', '#6366F1', '#84CC16', '#06B6D4',
 ];
 
-const VALID_LEVELS   = ['junior', 'mid', 'senior', 'staff', 'principal'];
+const VALID_LEVELS   = ['senior', 'staff_plus'];
+const LEVEL_LABELS   = { senior: 'Senior', staff_plus: 'Staff+' };
 const TAG_CATEGORIES = ['language', 'framework', 'domain', 'other'];
 const LEVEL_COLORS   = {
-  junior:    'bg-sky-100 text-sky-700',
-  mid:       'bg-blue-100 text-blue-700',
-  senior:    'bg-indigo-100 text-indigo-700',
-  staff:     'bg-purple-100 text-purple-700',
-  principal: 'bg-fuchsia-100 text-fuchsia-700',
+  senior:     'bg-indigo-100 text-indigo-700',
+  staff_plus: 'bg-purple-100 text-purple-700',
 };
 
 function ColorDot({ color, size = 'w-4 h-4' }) {
@@ -91,10 +89,17 @@ export default function Settings() {
   const [panelistError, setPanelistError]   = useState('');
   const [editPanelistId, setEditPanelistId] = useState(null); // null = add mode, id = edit mode
 
+  // ── Interview Types state ─────────────────────────────────
+  const [interviewTypes, setInterviewTypes] = useState([]);
+  const [itForm, setItForm]                 = useState({ name: '', duration_mins: 60, level_requirement: 'senior', required_tag_id: '', min_panelists: 2 });
+  const [itError, setItError]               = useState('');
+  const [editItId, setEditItId]             = useState(null);
+  const [editItForm, setEditItForm]         = useState({});
+
   const load = useCallback(async () => {
-    const [s, u, hm, gcalStatus, tags, panelsList] = await Promise.all([
+    const [s, u, hm, gcalStatus, tags, panelsList, itList] = await Promise.all([
       api.getStages(), api.getUsers(), api.getHmUsers(), api.googleAuthStatus(),
-      api.getPanelistTags(), api.getPanelists(),
+      api.getPanelistTags(), api.getPanelists(), api.getInterviewTypes(),
     ]);
     setStages(Array.isArray(s) ? s : []);
     setUsers(Array.isArray(u) ? u : []);
@@ -102,6 +107,7 @@ export default function Settings() {
     setGcal({ connected: gcalStatus?.connected ?? false, email: gcalStatus?.email ?? null });
     setPanelistTags(Array.isArray(tags) ? tags : []);
     setPanelists(Array.isArray(panelsList) ? panelsList : []);
+    setInterviewTypes(Array.isArray(itList) ? itList : []);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -317,6 +323,49 @@ export default function Settings() {
   const handleDeletePanelist = async (p) => {
     await api.deletePanelist(p.id);
     if (editPanelistId === p.id) cancelEditPanelist();
+    load();
+  };
+
+  // ── Interview Type handlers ───────────────────────────────────
+  const handleAddInterviewType = async (e) => {
+    e.preventDefault();
+    setItError('');
+    if (!itForm.name.trim()) { setItError('Name is required'); return; }
+    const res = await api.createInterviewType({
+      ...itForm,
+      required_tag_id: itForm.required_tag_id ? Number(itForm.required_tag_id) : null,
+    });
+    if (res.error) { setItError(res.error); return; }
+    setItForm({ name: '', duration_mins: 60, level_requirement: 'senior', required_tag_id: '', min_panelists: 2 });
+    load();
+  };
+
+  const startEditIt = (it) => {
+    setEditItId(it.id);
+    setEditItForm({
+      name:              it.name,
+      duration_mins:     it.duration_mins,
+      level_requirement: it.level_requirement,
+      required_tag_id:   it.required_tag_id ?? '',
+      min_panelists:     it.min_panelists,
+      order_index:       it.order_index,
+    });
+  };
+
+  const saveIt = async (it) => {
+    setItError('');
+    const res = await api.updateInterviewType(it.id, {
+      ...editItForm,
+      required_tag_id: editItForm.required_tag_id ? Number(editItForm.required_tag_id) : null,
+    });
+    if (res.error) { setItError(res.error); return; }
+    setEditItId(null);
+    load();
+  };
+
+  const handleDeleteIt = async (it) => {
+    await api.deleteInterviewType(it.id);
+    if (editItId === it.id) setEditItId(null);
     load();
   };
 
@@ -825,6 +874,158 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* ── Interview Types ───────────────────────────────────── */}
+      <div className="mt-10">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-800">Interview Types</h2>
+          <p className="text-slate-400 text-sm mt-0.5">
+            Define the panel interview types used when scheduling candidates.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Interview Types</p>
+            <p className="text-xs text-slate-400">{interviewTypes.length} total</p>
+          </div>
+          {interviewTypes.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-slate-400 italic">No interview types yet.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {interviewTypes.map(it => (
+                <li key={it.id} className="px-4 py-3 flex items-center gap-2 flex-wrap">
+                  {editItId === it.id ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={editItForm.name}
+                        onChange={e => setEditItForm(f => ({ ...f, name: e.target.value }))}
+                        className="flex-1 min-w-32 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <div className="flex gap-1">
+                        {[30, 45, 60, 90, 120].map(d => (
+                          <button key={d} type="button"
+                            onClick={() => setEditItForm(f => ({ ...f, duration_mins: d }))}
+                            className={`px-2 py-1 text-xs rounded-lg font-medium ${editItForm.duration_mins === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                            {d}m
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-1">
+                        {VALID_LEVELS.map(lvl => (
+                          <button key={lvl} type="button"
+                            onClick={() => setEditItForm(f => ({ ...f, level_requirement: lvl }))}
+                            className={`px-2 py-1 text-xs rounded-full font-medium ${editItForm.level_requirement === lvl ? LEVEL_COLORS[lvl] : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                            {LEVEL_LABELS[lvl]}
+                          </button>
+                        ))}
+                      </div>
+                      <select
+                        value={editItForm.required_tag_id}
+                        onChange={e => setEditItForm(f => ({ ...f, required_tag_id: e.target.value }))}
+                        className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">No required tag</option>
+                        {panelistTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                      <input type="number" min={1} max={10}
+                        value={editItForm.min_panelists}
+                        onChange={e => setEditItForm(f => ({ ...f, min_panelists: Number(e.target.value) }))}
+                        className="w-14 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button onClick={() => saveIt(it)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">Save</button>
+                      <button onClick={() => setEditItId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm text-slate-800 font-medium">{it.name}</span>
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">{it.duration_mins}m</span>
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${LEVEL_COLORS[it.level_requirement] || 'bg-slate-100 text-slate-600'}`}>
+                        {LEVEL_LABELS[it.level_requirement] || it.level_requirement}
+                      </span>
+                      {it.required_tag && (
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs rounded-full text-white font-medium"
+                          style={{ backgroundColor: it.required_tag.color }}>
+                          {it.required_tag.name}
+                        </span>
+                      )}
+                      <span className="text-xs text-slate-400">{it.min_panelists} panelist{it.min_panelists !== 1 ? 's' : ''} min</span>
+                      <button onClick={() => startEditIt(it)} className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200">Edit</button>
+                      <button onClick={() => handleDeleteIt(it)} className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100">Delete</button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {itError && <p className="text-red-600 text-sm mb-3">{itError}</p>}
+
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <h3 className="text-sm font-bold text-slate-700 mb-4">Add Interview Type</h3>
+          <form onSubmit={handleAddInterviewType} className="space-y-3">
+            <input
+              type="text"
+              value={itForm.name}
+              onChange={e => setItForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. System Design"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Duration</p>
+                <div className="flex gap-1">
+                  {[30, 45, 60, 90, 120].map(d => (
+                    <button key={d} type="button"
+                      onClick={() => setItForm(f => ({ ...f, duration_mins: d }))}
+                      className={`px-3 py-1.5 text-xs rounded-lg font-medium ${itForm.duration_mins === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                      {d}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Level requirement</p>
+                <div className="flex gap-1">
+                  {VALID_LEVELS.map(lvl => (
+                    <button key={lvl} type="button"
+                      onClick={() => setItForm(f => ({ ...f, level_requirement: lvl }))}
+                      className={`px-3 py-1.5 text-xs rounded-full font-medium ${itForm.level_requirement === lvl ? LEVEL_COLORS[lvl] : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                      {LEVEL_LABELS[lvl]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Min panelists</p>
+                <input type="number" min={1} max={10}
+                  value={itForm.min_panelists}
+                  onChange={e => setItForm(f => ({ ...f, min_panelists: Number(e.target.value) }))}
+                  className="w-16 border border-slate-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            {panelistTags.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Required tag (optional)</p>
+                <select
+                  value={itForm.required_tag_id}
+                  onChange={e => setItForm(f => ({ ...f, required_tag_id: e.target.value }))}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">None</option>
+                  {panelistTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+            )}
+            <button type="submit" className="px-5 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700">
+              Add Interview Type
+            </button>
+          </form>
+        </div>
+      </div>
+
       {/* ── Panelists ─────────────────────────────────────────── */}
       <div className="mt-10">
         <div className="mb-4">
@@ -856,7 +1057,7 @@ export default function Settings() {
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {p.interview_levels.map(lvl => (
                           <span key={lvl} className={`px-2 py-0.5 text-xs rounded-full font-medium ${LEVEL_COLORS[lvl] || 'bg-slate-100 text-slate-600'}`}>
-                            {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                            {LEVEL_LABELS[lvl] || lvl}
                           </span>
                         ))}
                       </div>
@@ -953,7 +1154,7 @@ export default function Settings() {
                         : 'bg-white text-slate-500 border-slate-300 hover:border-slate-400'
                     }`}
                   >
-                    {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                    {LEVEL_LABELS[lvl] || lvl}
                   </button>
                 ))}
               </div>

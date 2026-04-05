@@ -276,4 +276,49 @@ try {
 // Audit trail: record which HM made the forward/decline decision
 try { db.exec('ALTER TABLE candidates ADD COLUMN hm_decided_by TEXT'); } catch (_) {}
 
+// Interview types (configurable panel interview definitions)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS interview_types (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      name              TEXT    NOT NULL UNIQUE,
+      duration_mins     INTEGER NOT NULL DEFAULT 60,
+      level_requirement TEXT    NOT NULL DEFAULT 'senior',
+      required_tag_id   INTEGER REFERENCES panelist_tags(id) ON DELETE SET NULL,
+      min_panelists     INTEGER NOT NULL DEFAULT 2,
+      order_index       INTEGER NOT NULL DEFAULT 0,
+      created_at        TEXT    DEFAULT (datetime('now'))
+    );
+  `);
+  const itCount = db.prepare('SELECT COUNT(*) as c FROM interview_types').get().c;
+  if (itCount === 0) {
+    const ins = db.prepare(
+      'INSERT INTO interview_types (name, duration_mins, level_requirement, min_panelists, order_index) VALUES (?, ?, ?, ?, ?)'
+    );
+    [
+      ['Hiring Manager',           60, 'senior',     1, 1],
+      ['Pair Coding – TypeScript', 60, 'senior',     2, 2],
+      ['Pair Coding – Elixir',     60, 'senior',     2, 3],
+      ['Architectural Design',     90, 'staff_plus', 2, 4],
+      ['Engineering Manager + PM', 60, 'staff_plus', 2, 5],
+    ].forEach(row => ins.run(...row));
+  }
+} catch (_) {}
+
+// Backfill panelist interview_levels: collapse 5-tier → 2-tier (senior, staff_plus)
+try {
+  const rows = db.prepare('SELECT id, interview_levels FROM panelists').all();
+  const upd  = db.prepare('UPDATE panelists SET interview_levels = ? WHERE id = ?');
+  db.transaction(() => {
+    rows.forEach(p => {
+      const old      = JSON.parse(p.interview_levels || '[]');
+      const remapped = [];
+      if (old.includes('senior')) remapped.push('senior');
+      if ((old.includes('staff') || old.includes('principal')) && !remapped.includes('staff_plus'))
+        remapped.push('staff_plus');
+      upd.run(JSON.stringify(remapped), p.id);
+    });
+  })();
+} catch (_) {}
+
 module.exports = db;

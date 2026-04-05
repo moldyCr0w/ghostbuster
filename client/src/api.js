@@ -117,6 +117,12 @@ export const api = {
   updatePanelist:  (id, data)    => req(`/panelists/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
   deletePanelist:  (id)          => req(`/panelists/${id}`, { method: 'DELETE' }),
 
+  // ── Interview Types ────────────────────────────────────────────
+  getInterviewTypes:    ()         => req('/interview-types'),
+  createInterviewType:  (data)     => req('/interview-types',       { method: 'POST',   body: JSON.stringify(data) }),
+  updateInterviewType:  (id, data) => req(`/interview-types/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
+  deleteInterviewType:  (id)       => req(`/interview-types/${id}`, { method: 'DELETE' }),
+
   // ── Scheduling ─────────────────────────────────────────────────
   createScheduleLink: (data)        => req('/schedule',                   { method: 'POST', body: JSON.stringify(data) }),
   getScheduleLinks:   (candId)      => req(`/schedule/candidate/${candId}`),

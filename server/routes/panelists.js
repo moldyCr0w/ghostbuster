@@ -3,7 +3,7 @@ const router      = express.Router();
 const db          = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 
-const VALID_LEVELS = ['junior', 'mid', 'senior', 'staff', 'principal'];
+const VALID_LEVELS = ['senior', 'staff_plus'];
 
 // Expand tag IDs in a panelist row to full tag objects for the response.
 function expandTags(panelist) {
