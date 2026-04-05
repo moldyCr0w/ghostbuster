@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -60,6 +60,9 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const [schedLoading, setSchedLoading]       = useState(false);
   const [schedError, setSchedError]           = useState('');
   const [copiedToken, setCopiedToken]         = useState(null);
+  const [interviewTypes, setInterviewTypes]   = useState([]);
+  const [selectedItId, setSelectedItId]       = useState('');
+  const [compositionWarning, setCompositionWarning] = useState('');
 
   // ── Scorecard state ──
   const [scorecardReqId, setScorecardReqId] = useState(null);
@@ -100,6 +103,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
 
   useEffect(() => {
     api.getPanelists().then(d => { if (Array.isArray(d)) setSchedPanelists(d); }).catch(() => {});
+    api.getInterviewTypes().then(d => { if (Array.isArray(d)) setInterviewTypes(d); }).catch(() => {});
   }, []);
 
   // Load scorecard when editing and reqs are known
@@ -213,6 +217,73 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     setSubmittingHm(false);
   };
 
+  // ── Interview type derived values ──
+  const selectedIt = interviewTypes.find(it => it.id === Number(selectedItId)) ?? null;
+
+  const eligiblePanelists = useMemo(() => {
+    if (!selectedIt) return schedPanelists;
+    return schedPanelists.filter(p => {
+      const levels = p.interview_levels || [];
+      // staff_plus qualifies for senior-level interviews too
+      const levelOk = levels.includes(selectedIt.level_requirement)
+        || (selectedIt.level_requirement === 'senior' && levels.includes('staff_plus'));
+      if (!levelOk) return false;
+      if (selectedIt.required_tag_id) {
+        const tagIds = p.qualifications.map(t => (typeof t === 'object' ? t.id : t));
+        return tagIds.includes(selectedIt.required_tag_id);
+      }
+      return true;
+    });
+  }, [selectedIt, schedPanelists]); // eslint-disable-line
+
+  const handleInterviewTypeChange = (itId) => {
+    setSelectedItId(itId);
+    setCompositionWarning('');
+    if (!itId) return;
+    const it = interviewTypes.find(t => t.id === Number(itId));
+    if (!it) return;
+    setSchedForm(f => ({
+      ...f,
+      duration_mins: it.duration_mins,
+      panelist_emails: f.panelist_emails.filter(email => {
+        const p = schedPanelists.find(p => p.email === email);
+        if (!p) return false;
+        const levels = p.interview_levels || [];
+        const levelOk = levels.includes(it.level_requirement)
+          || (it.level_requirement === 'senior' && levels.includes('staff_plus'));
+        if (!levelOk) return false;
+        if (it.required_tag_id) {
+          const tagIds = p.qualifications.map(t => (typeof t === 'object' ? t.id : t));
+          return tagIds.includes(it.required_tag_id);
+        }
+        return true;
+      }),
+    }));
+  };
+
+  // Composition validation
+  useEffect(() => {
+    if (!selectedIt || schedForm.panelist_emails.length === 0) {
+      setCompositionWarning('');
+      return;
+    }
+    const selected = schedForm.panelist_emails
+      .map(email => schedPanelists.find(p => p.email === email))
+      .filter(Boolean);
+    if (selected.length < selectedIt.min_panelists) {
+      setCompositionWarning(`This interview type requires at least ${selectedIt.min_panelists} panelist(s).`);
+      return;
+    }
+    if (selectedIt.level_requirement === 'staff_plus') {
+      const hasStaffPlus = selected.some(p => (p.interview_levels || []).includes('staff_plus'));
+      if (!hasStaffPlus) {
+        setCompositionWarning('Staff+ interviews require at least one Staff+ qualified panelist.');
+        return;
+      }
+    }
+    setCompositionWarning('');
+  }, [schedForm.panelist_emails, selectedIt, schedPanelists]); // eslint-disable-line
+
   // ── Schedule handler ──
   const handleCreateScheduleLink = async () => {
     setSchedError('');
@@ -223,7 +294,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
         mode:            schedMode,
         panelist_emails: schedForm.panelist_emails,
         duration_mins:   schedForm.duration_mins,
-        interview_title: schedForm.interview_title || undefined,
+        interview_title: schedForm.interview_title || selectedIt?.name || undefined,
       };
       if (schedMode === 'self-schedule') {
         if (!schedForm.window_start || !schedForm.window_end) {
@@ -245,6 +316,8 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       if (result.error) { setSchedError(result.error); } else {
         setScheduleLinks(prev => [result, ...prev]);
         setShowScheduleForm(false);
+        setSelectedItId('');
+        setCompositionWarning('');
         setSchedForm({ panelist_emails: [], duration_mins: 60, window_start: '', window_end: '', proposed_start: '', interview_title: '' });
       }
     } catch (err) {
@@ -841,12 +914,30 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                 {/* Create form */}
                 {showScheduleForm ? (
                   <div className="px-3 py-3 bg-slate-50 border-t border-slate-100 space-y-3">
+
+                    {/* Interview Type */}
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Interview type</p>
+                      <select
+                        value={selectedItId}
+                        onChange={e => handleInterviewTypeChange(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">— Select a type —</option>
+                        {interviewTypes.map(it => (
+                          <option key={it.id} value={it.id}>
+                            {it.name} · {it.duration_mins}m · {it.level_requirement === 'staff_plus' ? 'Staff+' : 'Senior'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Title */}
                     <input
                       type="text"
                       value={schedForm.interview_title}
                       onChange={e => setSchedForm(f => ({ ...f, interview_title: e.target.value }))}
-                      placeholder="Interview title (optional)"
+                      placeholder={selectedIt ? `Interview title (defaults to "${selectedIt.name}")` : 'Interview title (optional)'}
                       className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
 
@@ -866,9 +957,11 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
 
                     {/* Duration */}
                     <div>
-                      <p className="text-xs text-slate-500 mb-1">Duration</p>
+                      <p className="text-xs text-slate-500 mb-1">
+                        Duration{selectedIt ? <span className="text-blue-500 ml-1">(auto-filled from type)</span> : ''}
+                      </p>
                       <div className="flex gap-2">
-                        {[30, 45, 60, 90].map(d => (
+                        {[30, 45, 60, 90, 120].map(d => (
                           <button
                             key={d}
                             type="button"
@@ -884,26 +977,49 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                     {/* Panelists */}
                     {schedPanelists.length > 0 && (
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Panelists</p>
-                        <div className="max-h-28 overflow-y-auto space-y-1">
-                          {schedPanelists.map(p => (
-                            <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={schedForm.panelist_emails.includes(p.email)}
-                                onChange={() => setSchedForm(f => ({
-                                  ...f,
-                                  panelist_emails: f.panelist_emails.includes(p.email)
-                                    ? f.panelist_emails.filter(e => e !== p.email)
-                                    : [...f.panelist_emails, p.email],
-                                }))}
-                                className="rounded border-slate-300 text-blue-600"
-                              />
-                              <span className="text-slate-700">{p.name}</span>
-                              <span className="text-slate-400">{p.email}</span>
-                            </label>
-                          ))}
-                        </div>
+                        <p className="text-xs text-slate-500 mb-1">
+                          Panelists
+                          {selectedIt && eligiblePanelists.length < schedPanelists.length && (
+                            <span className="text-amber-600 ml-1">
+                              ({eligiblePanelists.length} of {schedPanelists.length} eligible)
+                            </span>
+                          )}
+                        </p>
+                        {eligiblePanelists.length === 0 ? (
+                          <p className="text-xs text-amber-600 italic">
+                            No panelists match the requirements for this interview type.
+                          </p>
+                        ) : (
+                          <div className="max-h-28 overflow-y-auto space-y-1">
+                            {eligiblePanelists.map(p => (
+                              <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={schedForm.panelist_emails.includes(p.email)}
+                                  onChange={() => setSchedForm(f => ({
+                                    ...f,
+                                    panelist_emails: f.panelist_emails.includes(p.email)
+                                      ? f.panelist_emails.filter(e => e !== p.email)
+                                      : [...f.panelist_emails, p.email],
+                                  }))}
+                                  className="rounded border-slate-300 text-blue-600"
+                                />
+                                <span className="text-slate-700">{p.name}</span>
+                                <span className="text-slate-400">{p.email}</span>
+                                {p.interview_levels?.includes('staff_plus') && (
+                                  <span className="ml-auto text-purple-600 font-semibold text-xs">Staff+</span>
+                                )}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Composition warning */}
+                    {compositionWarning && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <p className="text-xs text-amber-700">{compositionWarning}</p>
                       </div>
                     )}
 
@@ -947,14 +1063,14 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                       <button
                         type="button"
                         onClick={handleCreateScheduleLink}
-                        disabled={schedLoading}
+                        disabled={schedLoading || !!compositionWarning}
                         className="flex-1 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
                       >
                         {schedLoading ? 'Creating…' : schedMode === 'propose' ? 'Create Event' : 'Generate Link'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setShowScheduleForm(false); setSchedError(''); }}
+                        onClick={() => { setShowScheduleForm(false); setSchedError(''); setSelectedItId(''); setCompositionWarning(''); }}
                         className="px-4 py-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-200"
                       >
                         Cancel
