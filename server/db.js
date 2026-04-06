@@ -231,6 +231,7 @@ try {
       token            TEXT    NOT NULL UNIQUE,
       candidate_id     INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
       created_by       INTEGER REFERENCES users(id),
+      req_id           INTEGER REFERENCES reqs(id) ON DELETE SET NULL,
       mode             TEXT    NOT NULL DEFAULT 'self-schedule',
       status           TEXT    NOT NULL DEFAULT 'pending',
       panelist_emails  TEXT    NOT NULL DEFAULT '[]',
@@ -287,20 +288,26 @@ try {
       required_tag_id   INTEGER REFERENCES panelist_tags(id) ON DELETE SET NULL,
       min_panelists     INTEGER NOT NULL DEFAULT 2,
       order_index       INTEGER NOT NULL DEFAULT 0,
+      category          TEXT    NOT NULL DEFAULT 'custom',
+      stack             TEXT,
+      whiteboard_url    TEXT,
       created_at        TEXT    DEFAULT (datetime('now'))
     );
   `);
   const itCount = db.prepare('SELECT COUNT(*) as c FROM interview_types').get().c;
   if (itCount === 0) {
     const ins = db.prepare(
-      'INSERT INTO interview_types (name, duration_mins, level_requirement, min_panelists, order_index) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO interview_types (name, category, stack, whiteboard_url, duration_mins, level_requirement, min_panelists, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     );
+    // name, category, stack, whiteboard_url, duration_mins, level_requirement, min_panelists, order_index
     [
-      ['Hiring Manager',           60, 'senior',     1, 1],
-      ['Pair Coding – TypeScript', 60, 'senior',     2, 2],
-      ['Pair Coding – Elixir',     60, 'senior',     2, 3],
-      ['Architectural Design',     90, 'staff_plus', 2, 4],
-      ['Engineering Manager + PM', 60, 'staff_plus', 2, 5],
+      ['Hiring Manager',                    'hm',                   null,         null,                        60, 'senior',     1, 1],
+      ['Pair Coding – TypeScript – Senior', 'pair_coding',          'typescript', null,                        90, 'senior',     2, 2],
+      ['Pair Coding – TypeScript – Staff+', 'pair_coding',          'typescript', null,                        90, 'staff_plus', 2, 3],
+      ['Pair Coding – Elixir – Senior',     'pair_coding',          'elixir',     null,                        90, 'senior',     2, 4],
+      ['Pair Coding – Elixir – Staff+',     'pair_coding',          'elixir',     null,                        90, 'staff_plus', 2, 5],
+      ['Architectural Design',              'architectural_design',  null,         'https://www.tldraw.com/',   90, 'staff_plus', 2, 6],
+      ['Engineering Manager + PM',          'em_pm',                null,         null,                        60, 'staff_plus', 2, 7],
     ].forEach(row => ins.run(...row));
   }
 } catch (_) {}
@@ -308,6 +315,42 @@ try {
 // Add interview_type_id to schedule_links (links a link to a specific interview type for round-robin)
 try {
   db.prepare('ALTER TABLE schedule_links ADD COLUMN interview_type_id INTEGER REFERENCES interview_types(id) ON DELETE SET NULL').run();
+} catch (_) {}
+
+// Add req_id to schedule_links (tracks which req this interview is for)
+try {
+  db.prepare('ALTER TABLE schedule_links ADD COLUMN req_id INTEGER REFERENCES reqs(id) ON DELETE SET NULL').run();
+} catch (_) {}
+
+// Add category, stack, whiteboard_url to interview_types (for existing databases)
+try { db.prepare("ALTER TABLE interview_types ADD COLUMN category TEXT NOT NULL DEFAULT 'custom'").run(); } catch (_) {}
+try { db.prepare('ALTER TABLE interview_types ADD COLUMN stack TEXT').run(); } catch (_) {}
+try { db.prepare('ALTER TABLE interview_types ADD COLUMN whiteboard_url TEXT').run(); } catch (_) {}
+
+// Backfill interview_types: set category, stack, duration, and whiteboard for existing records
+try {
+  db.exec(`
+    UPDATE interview_types SET category = 'hm'                   WHERE category = 'custom' AND name LIKE '%Hiring Manager%';
+    UPDATE interview_types SET category = 'pair_coding'           WHERE category = 'custom' AND name LIKE '%Pair Coding%';
+    UPDATE interview_types SET category = 'architectural_design'  WHERE category = 'custom' AND name LIKE '%Architectural%';
+    UPDATE interview_types SET category = 'em_pm'                 WHERE category = 'custom' AND (name LIKE '%Manager + PM%' OR name LIKE '%EM%PM%');
+    UPDATE interview_types SET stack = 'typescript' WHERE category = 'pair_coding' AND name LIKE '%TypeScript%';
+    UPDATE interview_types SET stack = 'elixir'     WHERE category = 'pair_coding' AND name LIKE '%Elixir%';
+    UPDATE interview_types SET duration_mins = 90   WHERE category = 'pair_coding' AND duration_mins < 90;
+    UPDATE interview_types SET whiteboard_url = 'https://www.tldraw.com/' WHERE category = 'architectural_design' AND whiteboard_url IS NULL;
+  `);
+} catch (_) {}
+
+// Add Staff+ pair coding variants for existing databases (INSERT OR IGNORE respects UNIQUE name constraint)
+try {
+  const maxOrd = db.prepare('SELECT MAX(order_index) as m FROM interview_types').get().m || 0;
+  const insV   = db.prepare(
+    "INSERT OR IGNORE INTO interview_types (name, category, stack, duration_mins, level_requirement, min_panelists, order_index) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+  db.transaction(() => {
+    insV.run('Pair Coding – TypeScript – Staff+', 'pair_coding', 'typescript', 90, 'staff_plus', 2, maxOrd + 1);
+    insV.run('Pair Coding – Elixir – Staff+',     'pair_coding', 'elixir',     90, 'staff_plus', 2, maxOrd + 2);
+  })();
 } catch (_) {}
 
 // Backfill panelist interview_levels: collapse 5-tier → 2-tier (senior, staff_plus)

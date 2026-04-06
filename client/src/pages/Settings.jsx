@@ -17,6 +17,37 @@ const LEVEL_COLORS   = {
   staff_plus: 'bg-purple-100 text-purple-700',
 };
 
+const IT_CATEGORIES = [
+  { value: 'hm',                   label: 'HM' },
+  { value: 'pair_coding',          label: 'Pair Coding' },
+  { value: 'architectural_design', label: 'Architectural Design' },
+  { value: 'em_pm',                label: 'EM + PM' },
+  { value: 'custom',               label: 'Custom' },
+];
+const IT_CATEGORY_LABELS = Object.fromEntries(IT_CATEGORIES.map(c => [c.value, c.label]));
+const IT_CATEGORY_COLORS = {
+  hm:                   'bg-orange-100 text-orange-700',
+  pair_coding:          'bg-teal-100 text-teal-700',
+  architectural_design: 'bg-violet-100 text-violet-700',
+  em_pm:                'bg-sky-100 text-sky-700',
+  custom:               'bg-slate-100 text-slate-500',
+};
+const STACK_OPTIONS = [
+  { value: 'typescript', label: 'TypeScript' },
+  { value: 'elixir',     label: 'Elixir' },
+];
+const STACK_COLORS = {
+  typescript: 'bg-blue-100 text-blue-700',
+  elixir:     'bg-purple-100 text-purple-700',
+};
+const DEFAULT_DURATION_FOR_CATEGORY = {
+  hm:                   60,
+  pair_coding:          90,
+  architectural_design: 90,
+  em_pm:                60,
+  custom:               60,
+};
+
 function ColorDot({ color, size = 'w-4 h-4' }) {
   return <div className={`${size} rounded-full flex-shrink-0`} style={{ backgroundColor: color }} />;
 }
@@ -91,7 +122,7 @@ export default function Settings() {
 
   // ── Interview Types state ─────────────────────────────────
   const [interviewTypes, setInterviewTypes] = useState([]);
-  const [itForm, setItForm]                 = useState({ name: '', duration_mins: 60, level_requirement: 'senior', required_tag_id: '', min_panelists: 2 });
+  const [itForm, setItForm]                 = useState({ name: '', duration_mins: 60, level_requirement: 'senior', required_tag_id: '', min_panelists: 2, category: 'custom', stack: '', whiteboard_url: '' });
   const [itError, setItError]               = useState('');
   const [editItId, setEditItId]             = useState(null);
   const [editItForm, setEditItForm]         = useState({});
@@ -334,10 +365,24 @@ export default function Settings() {
     const res = await api.createInterviewType({
       ...itForm,
       required_tag_id: itForm.required_tag_id ? Number(itForm.required_tag_id) : null,
+      stack:           itForm.category === 'pair_coding' ? itForm.stack || null : null,
+      whiteboard_url:  itForm.category === 'architectural_design' ? itForm.whiteboard_url || null : null,
     });
     if (res.error) { setItError(res.error); return; }
-    setItForm({ name: '', duration_mins: 60, level_requirement: 'senior', required_tag_id: '', min_panelists: 2 });
+    setItForm({ name: '', duration_mins: 60, level_requirement: 'senior', required_tag_id: '', min_panelists: 2, category: 'custom', stack: '', whiteboard_url: '' });
     load();
+  };
+
+  const handleItCategoryChange = (category) => {
+    setItForm(f => ({
+      ...f,
+      category,
+      duration_mins: DEFAULT_DURATION_FOR_CATEGORY[category] ?? f.duration_mins,
+      // Auto-set level for categories that have fixed requirements
+      level_requirement: category === 'architectural_design' || category === 'em_pm' ? 'staff_plus' : f.level_requirement,
+      stack: category === 'pair_coding' ? f.stack : '',
+      whiteboard_url: category === 'architectural_design' ? (f.whiteboard_url || 'https://www.tldraw.com/') : '',
+    }));
   };
 
   const startEditIt = (it) => {
@@ -349,6 +394,9 @@ export default function Settings() {
       required_tag_id:   it.required_tag_id ?? '',
       min_panelists:     it.min_panelists,
       order_index:       it.order_index,
+      category:          it.category ?? 'custom',
+      stack:             it.stack ?? '',
+      whiteboard_url:    it.whiteboard_url ?? '',
     });
   };
 
@@ -357,6 +405,8 @@ export default function Settings() {
     const res = await api.updateInterviewType(it.id, {
       ...editItForm,
       required_tag_id: editItForm.required_tag_id ? Number(editItForm.required_tag_id) : null,
+      stack:           editItForm.category === 'pair_coding' ? editItForm.stack || null : null,
+      whiteboard_url:  editItForm.category === 'architectural_design' ? editItForm.whiteboard_url || null : null,
     });
     if (res.error) { setItError(res.error); return; }
     setEditItId(null);
@@ -895,50 +945,98 @@ export default function Settings() {
               {interviewTypes.map(it => (
                 <li key={it.id} className="px-4 py-3 flex items-center gap-2 flex-wrap">
                   {editItId === it.id ? (
-                    <>
-                      <input
-                        autoFocus
-                        value={editItForm.name}
-                        onChange={e => setEditItForm(f => ({ ...f, name: e.target.value }))}
-                        className="flex-1 min-w-32 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <div className="flex gap-1">
-                        {[30, 45, 60, 90, 120].map(d => (
-                          <button key={d} type="button"
-                            onClick={() => setEditItForm(f => ({ ...f, duration_mins: d }))}
-                            className={`px-2 py-1 text-xs rounded-lg font-medium ${editItForm.duration_mins === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                            {d}m
-                          </button>
-                        ))}
+                    <div className="w-full space-y-2">
+                      {/* Row 1: name + category */}
+                      <div className="flex gap-2 flex-wrap">
+                        <input
+                          autoFocus
+                          value={editItForm.name}
+                          onChange={e => setEditItForm(f => ({ ...f, name: e.target.value }))}
+                          className="flex-1 min-w-32 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <select
+                          value={editItForm.category}
+                          onChange={e => setEditItForm(f => ({
+                            ...f,
+                            category: e.target.value,
+                            stack: e.target.value === 'pair_coding' ? f.stack : '',
+                            whiteboard_url: e.target.value === 'architectural_design' ? (f.whiteboard_url || 'https://www.tldraw.com/') : '',
+                          }))}
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                        >
+                          {IT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        </select>
+                        {editItForm.category === 'pair_coding' && (
+                          <select
+                            value={editItForm.stack}
+                            onChange={e => setEditItForm(f => ({ ...f, stack: e.target.value }))}
+                            className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                          >
+                            <option value="">No stack</option>
+                            {STACK_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                          </select>
+                        )}
                       </div>
-                      <div className="flex gap-1">
-                        {VALID_LEVELS.map(lvl => (
-                          <button key={lvl} type="button"
-                            onClick={() => setEditItForm(f => ({ ...f, level_requirement: lvl }))}
-                            className={`px-2 py-1 text-xs rounded-full font-medium ${editItForm.level_requirement === lvl ? LEVEL_COLORS[lvl] : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-                            {LEVEL_LABELS[lvl]}
-                          </button>
-                        ))}
+                      {/* Row 2: duration + level + tag + min */}
+                      <div className="flex gap-2 flex-wrap items-center">
+                        <div className="flex gap-1">
+                          {[30, 45, 60, 90, 120].map(d => (
+                            <button key={d} type="button"
+                              onClick={() => setEditItForm(f => ({ ...f, duration_mins: d }))}
+                              className={`px-2 py-1 text-xs rounded-lg font-medium ${editItForm.duration_mins === d ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                              {d}m
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-1">
+                          {VALID_LEVELS.map(lvl => (
+                            <button key={lvl} type="button"
+                              onClick={() => setEditItForm(f => ({ ...f, level_requirement: lvl }))}
+                              className={`px-2 py-1 text-xs rounded-full font-medium ${editItForm.level_requirement === lvl ? LEVEL_COLORS[lvl] : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                              {LEVEL_LABELS[lvl]}
+                            </button>
+                          ))}
+                        </div>
+                        <select
+                          value={editItForm.required_tag_id}
+                          onChange={e => setEditItForm(f => ({ ...f, required_tag_id: e.target.value }))}
+                          className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none"
+                        >
+                          <option value="">No required tag</option>
+                          {panelistTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <input type="number" min={1} max={10}
+                          value={editItForm.min_panelists}
+                          onChange={e => setEditItForm(f => ({ ...f, min_panelists: Number(e.target.value) }))}
+                          className="w-14 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none"
+                        />
                       </div>
-                      <select
-                        value={editItForm.required_tag_id}
-                        onChange={e => setEditItForm(f => ({ ...f, required_tag_id: e.target.value }))}
-                        className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">No required tag</option>
-                        {panelistTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                      <input type="number" min={1} max={10}
-                        value={editItForm.min_panelists}
-                        onChange={e => setEditItForm(f => ({ ...f, min_panelists: Number(e.target.value) }))}
-                        className="w-14 border border-slate-300 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <button onClick={() => saveIt(it)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">Save</button>
-                      <button onClick={() => setEditItId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200">Cancel</button>
-                    </>
+                      {/* Row 3: whiteboard URL (architectural design only) */}
+                      {editItForm.category === 'architectural_design' && (
+                        <input
+                          type="url"
+                          value={editItForm.whiteboard_url}
+                          onChange={e => setEditItForm(f => ({ ...f, whiteboard_url: e.target.value }))}
+                          placeholder="https://www.tldraw.com/"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={() => saveIt(it)} className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">Save</button>
+                        <button onClick={() => setEditItId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200">Cancel</button>
+                      </div>
+                    </div>
                   ) : (
                     <>
                       <span className="flex-1 text-sm text-slate-800 font-medium">{it.name}</span>
+                      <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${IT_CATEGORY_COLORS[it.category] || 'bg-slate-100 text-slate-500'}`}>
+                        {IT_CATEGORY_LABELS[it.category] || it.category}
+                      </span>
+                      {it.stack && (
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${STACK_COLORS[it.stack] || 'bg-slate-100 text-slate-500'}`}>
+                          {STACK_OPTIONS.find(s => s.value === it.stack)?.label || it.stack}
+                        </span>
+                      )}
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">{it.duration_mins}m</span>
                       <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${LEVEL_COLORS[it.level_requirement] || 'bg-slate-100 text-slate-600'}`}>
                         {LEVEL_LABELS[it.level_requirement] || it.level_requirement}
@@ -948,6 +1046,12 @@ export default function Settings() {
                           style={{ backgroundColor: it.required_tag.color }}>
                           {it.required_tag.name}
                         </span>
+                      )}
+                      {it.whiteboard_url && (
+                        <a href={it.whiteboard_url} target="_blank" rel="noopener noreferrer"
+                          className="px-2 py-0.5 text-xs rounded-full bg-violet-50 text-violet-600 hover:bg-violet-100 font-medium">
+                          Whiteboard ↗
+                        </a>
                       )}
                       <span className="text-xs text-slate-400">{it.min_panelists} panelist{it.min_panelists !== 1 ? 's' : ''} min</span>
                       <button onClick={() => startEditIt(it)} className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200">Edit</button>
@@ -965,13 +1069,54 @@ export default function Settings() {
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <h3 className="text-sm font-bold text-slate-700 mb-4">Add Interview Type</h3>
           <form onSubmit={handleAddInterviewType} className="space-y-3">
-            <input
-              type="text"
-              value={itForm.name}
-              onChange={e => setItForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. System Design"
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            {/* Name + category */}
+            <div className="flex gap-2 flex-wrap">
+              <input
+                type="text"
+                value={itForm.name}
+                onChange={e => setItForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. System Design"
+                className="flex-1 min-w-48 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Category</p>
+                <select
+                  value={itForm.category}
+                  onChange={e => handleItCategoryChange(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {IT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              {itForm.category === 'pair_coding' && (
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Stack</p>
+                  <select
+                    value={itForm.stack}
+                    onChange={e => setItForm(f => ({ ...f, stack: e.target.value }))}
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">No stack</option>
+                    {STACK_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Whiteboard URL (architectural design only) */}
+            {itForm.category === 'architectural_design' && (
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Whiteboard URL</p>
+                <input
+                  type="url"
+                  value={itForm.whiteboard_url}
+                  onChange={e => setItForm(f => ({ ...f, whiteboard_url: e.target.value }))}
+                  placeholder="https://www.tldraw.com/"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-4">
               <div>
                 <p className="text-xs text-slate-500 mb-1">Duration</p>

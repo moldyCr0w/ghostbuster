@@ -57,6 +57,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     window_start: '', window_end: '',
     proposed_start: '', interview_title: '',
   });
+  const [schedReqId, setSchedReqId]           = useState('');
   const [schedLoading, setSchedLoading]       = useState(false);
   const [schedError, setSchedError]           = useState('');
   const [copiedToken, setCopiedToken]         = useState(null);
@@ -300,6 +301,8 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
         interview_title: schedForm.interview_title || selectedIt?.name || undefined,
       };
 
+      if (schedReqId) payload.req_id = Number(schedReqId);
+
       // For round-robin self-schedule, send interview_type_id — no manual panelists needed.
       // For propose mode (or self-schedule without a type), send the manually selected panelists.
       if (isRoundRobin) {
@@ -330,6 +333,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
         setScheduleLinks(prev => [result, ...prev]);
         setShowScheduleForm(false);
         setSelectedItId('');
+        setSchedReqId('');
         setCompositionWarning('');
         setSchedForm({ panelist_emails: [], duration_mins: 60, window_start: '', window_end: '', proposed_start: '', interview_title: '' });
       }
@@ -945,6 +949,25 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                       </select>
                     </div>
 
+                    {/* Req (shown when candidate is linked to any reqs) */}
+                    {linkedReqs.length > 0 && (
+                      <div>
+                        <p className="text-xs text-slate-500 mb-1">Requisition</p>
+                        <select
+                          value={schedReqId}
+                          onChange={e => setSchedReqId(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                          <option value="">— Select req —</option>
+                          {linkedReqs.map(r => (
+                            <option key={r.id} value={r.id}>
+                              {r.req_id} · {r.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {/* Title */}
                     <input
                       type="text"
@@ -1095,7 +1118,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setShowScheduleForm(false); setSchedError(''); setSelectedItId(''); setCompositionWarning(''); }}
+                        onClick={() => { setShowScheduleForm(false); setSchedError(''); setSelectedItId(''); setSchedReqId(''); setCompositionWarning(''); }}
                         className="px-4 py-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-200"
                       >
                         Cancel

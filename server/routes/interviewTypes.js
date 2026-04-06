@@ -3,7 +3,9 @@ const router      = express.Router();
 const db          = require('../db');
 const requireAuth = require('../middleware/requireAuth');
 
-const VALID_LEVELS = ['senior', 'staff_plus'];
+const VALID_LEVELS      = ['senior', 'staff_plus'];
+const VALID_CATEGORIES  = ['hm', 'pair_coding', 'architectural_design', 'em_pm', 'custom'];
+const VALID_STACKS      = ['typescript', 'elixir'];
 
 function expandType(it) {
   const tag = it.required_tag_id
@@ -25,17 +27,29 @@ router.post('/', requireAuth, (req, res) => {
     level_requirement = 'senior',
     required_tag_id = null,
     min_panelists = 2,
+    category = 'custom',
+    stack = null,
+    whiteboard_url = null,
   } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   if (!VALID_LEVELS.includes(level_requirement))
     return res.status(400).json({ error: 'level_requirement must be senior or staff_plus' });
+  if (!VALID_CATEGORIES.includes(category))
+    return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+  if (stack && !VALID_STACKS.includes(stack))
+    return res.status(400).json({ error: `stack must be one of: ${VALID_STACKS.join(', ')}` });
 
   const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM interview_types').get().m || 0;
   try {
     const r = db.prepare(`
-      INSERT INTO interview_types (name, duration_mins, level_requirement, required_tag_id, min_panelists, order_index)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(name.trim(), duration_mins, level_requirement, required_tag_id || null, min_panelists, maxOrder + 1);
+      INSERT INTO interview_types
+        (name, duration_mins, level_requirement, required_tag_id, min_panelists, order_index, category, stack, whiteboard_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      name.trim(), duration_mins, level_requirement,
+      required_tag_id || null, min_panelists, maxOrder + 1,
+      category, stack || null, whiteboard_url || null
+    );
     res.json(expandType(db.prepare('SELECT * FROM interview_types WHERE id = ?').get(r.lastInsertRowid)));
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'An interview type with that name already exists' });
@@ -55,17 +69,30 @@ router.put('/:id', requireAuth, (req, res) => {
     required_tag_id   = existing.required_tag_id,
     min_panelists     = existing.min_panelists,
     order_index       = existing.order_index,
+    category          = existing.category ?? 'custom',
+    stack             = existing.stack ?? null,
+    whiteboard_url    = existing.whiteboard_url ?? null,
   } = req.body;
 
   if (!VALID_LEVELS.includes(level_requirement))
     return res.status(400).json({ error: 'level_requirement must be senior or staff_plus' });
+  if (!VALID_CATEGORIES.includes(category))
+    return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+  if (stack && !VALID_STACKS.includes(stack))
+    return res.status(400).json({ error: `stack must be one of: ${VALID_STACKS.join(', ')}` });
 
   try {
     db.prepare(`
       UPDATE interview_types
-      SET name=?, duration_mins=?, level_requirement=?, required_tag_id=?, min_panelists=?, order_index=?
+      SET name=?, duration_mins=?, level_requirement=?, required_tag_id=?,
+          min_panelists=?, order_index=?, category=?, stack=?, whiteboard_url=?
       WHERE id=?
-    `).run(name.trim(), duration_mins, level_requirement, required_tag_id || null, min_panelists, order_index, req.params.id);
+    `).run(
+      name.trim(), duration_mins, level_requirement,
+      required_tag_id || null, min_panelists, order_index,
+      category, stack || null, whiteboard_url || null,
+      req.params.id
+    );
     res.json(expandType(db.prepare('SELECT * FROM interview_types WHERE id = ?').get(req.params.id)));
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'An interview type with that name already exists' });
