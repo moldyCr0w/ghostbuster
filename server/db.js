@@ -296,18 +296,25 @@ try {
   `);
   const itCount = db.prepare('SELECT COUNT(*) as c FROM interview_types').get().c;
   if (itCount === 0) {
+    // Seed stack qualification tags first so pair coding types can reference them
+    const insTag = db.prepare("INSERT OR IGNORE INTO panelist_tags (name, category, color) VALUES (?, 'stack', ?)");
+    insTag.run('TypeScript', '#3178C6');
+    insTag.run('Elixir',     '#6E4FA4');
+    const tsTag = db.prepare("SELECT id FROM panelist_tags WHERE name = 'TypeScript'").get();
+    const elTag = db.prepare("SELECT id FROM panelist_tags WHERE name = 'Elixir'").get();
+
     const ins = db.prepare(
-      'INSERT INTO interview_types (name, category, stack, whiteboard_url, duration_mins, level_requirement, min_panelists, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO interview_types (name, category, stack, whiteboard_url, duration_mins, level_requirement, required_tag_id, min_panelists, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    // name, category, stack, whiteboard_url, duration_mins, level_requirement, min_panelists, order_index
+    // name, category, stack, whiteboard_url, duration_mins, level_requirement, required_tag_id, min_panelists, order_index
     [
-      ['Hiring Manager',                    'hm',                   null,         null,                        60, 'senior',     1, 1],
-      ['Pair Coding – TypeScript – Senior', 'pair_coding',          'typescript', null,                        90, 'senior',     2, 2],
-      ['Pair Coding – TypeScript – Staff+', 'pair_coding',          'typescript', null,                        90, 'staff_plus', 2, 3],
-      ['Pair Coding – Elixir – Senior',     'pair_coding',          'elixir',     null,                        90, 'senior',     2, 4],
-      ['Pair Coding – Elixir – Staff+',     'pair_coding',          'elixir',     null,                        90, 'staff_plus', 2, 5],
-      ['Architectural Design',              'architectural_design',  null,         'https://www.tldraw.com/',   90, 'staff_plus', 2, 6],
-      ['Engineering Manager + PM',          'em_pm',                null,         null,                        60, 'staff_plus', 2, 7],
+      ['Hiring Manager',                    'hm',                   null,         null,                        60, 'senior',     null,        1, 1],
+      ['Pair Coding – TypeScript – Senior', 'pair_coding',          'typescript', null,                        90, 'senior',     tsTag.id,    2, 2],
+      ['Pair Coding – TypeScript – Staff+', 'pair_coding',          'typescript', null,                        90, 'staff_plus', tsTag.id,    2, 3],
+      ['Pair Coding – Elixir – Senior',     'pair_coding',          'elixir',     null,                        90, 'senior',     elTag.id,    2, 4],
+      ['Pair Coding – Elixir – Staff+',     'pair_coding',          'elixir',     null,                        90, 'staff_plus', elTag.id,    2, 5],
+      ['Architectural Design',              'architectural_design',  null,         'https://www.tldraw.com/',   90, 'staff_plus', null,        2, 6],
+      ['Engineering Manager + PM',          'em_pm',                null,         null,                        60, 'staff_plus', null,        2, 7],
     ].forEach(row => ins.run(...row));
   }
 } catch (_) {}
@@ -367,6 +374,16 @@ try {
       upd.run(JSON.stringify(remapped), p.id);
     });
   })();
+} catch (_) {}
+
+// Seed TypeScript/Elixir stack tags and link them to pair coding interview types (existing DBs)
+try {
+  db.prepare("INSERT OR IGNORE INTO panelist_tags (name, category, color) VALUES ('TypeScript', 'stack', '#3178C6')").run();
+  db.prepare("INSERT OR IGNORE INTO panelist_tags (name, category, color) VALUES ('Elixir',     'stack', '#6E4FA4')").run();
+  const tsId = db.prepare("SELECT id FROM panelist_tags WHERE name = 'TypeScript'").get()?.id;
+  const elId = db.prepare("SELECT id FROM panelist_tags WHERE name = 'Elixir'").get()?.id;
+  if (tsId) db.prepare("UPDATE interview_types SET required_tag_id = ? WHERE category = 'pair_coding' AND stack = 'typescript' AND required_tag_id IS NULL").run(tsId);
+  if (elId) db.prepare("UPDATE interview_types SET required_tag_id = ? WHERE category = 'pair_coding' AND stack = 'elixir'     AND required_tag_id IS NULL").run(elId);
 } catch (_) {}
 
 module.exports = db;
