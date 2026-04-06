@@ -6,20 +6,30 @@ import CandidateModal from '../components/CandidateModal';
 
 /* ── Candidate card ──────────────────────────────────────────────── */
 function CandidateCard({ candidate, today, onEdit, onDragStart }) {
-  const isOverdue  = candidate.next_step_due && candidate.next_step_due < today;
-  const isHmReview = !!candidate.is_hm_review;
+  const isOverdue   = candidate.next_step_due && candidate.next_step_due < today;
+  const isHmReview  = !!candidate.is_hm_review;
+  const isPending   = !!candidate.pending_next_stage_id;
 
   return (
     <div
-      draggable
-      onDragStart={e => onDragStart(e, candidate.id)}
+      draggable={!isPending}
+      onDragStart={isPending ? undefined : (e => onDragStart(e, candidate.id))}
       onClick={() => onEdit(candidate)}
       className={`bg-white rounded-lg border p-3 cursor-pointer hover:shadow-md active:opacity-70 transition-shadow select-none ${
+        isPending   ? 'border-teal-400 bg-teal-50 ring-1 ring-teal-300' :
         isOverdue   ? 'border-red-300 bg-red-50' :
         isHmReview  ? 'border-orange-300 bg-orange-50' :
         'border-slate-200'
       }`}
     >
+      {/* Pending banner */}
+      {isPending && (
+        <div className="flex items-center gap-1 mb-2 px-1.5 py-0.5 bg-teal-100 rounded text-teal-700 text-xs font-semibold">
+          <span>⏳</span>
+          <span>Pending TA Action</span>
+        </div>
+      )}
+
       {/* Name */}
       <p className="text-sm font-semibold text-slate-800 leading-tight">
         {candidate.display_name || candidate.name}
@@ -45,10 +55,13 @@ function CandidateCard({ candidate, today, onEdit, onDragStart }) {
       )}
 
       {/* Status tags */}
-      {isOverdue && (
+      {isPending && candidate.pending_reason && (
+        <p className="text-xs text-teal-600 mt-1.5 italic">{candidate.pending_reason}</p>
+      )}
+      {!isPending && isOverdue && (
         <p className="text-xs text-red-600 font-semibold mt-1.5">🚨 SLA overdue</p>
       )}
-      {isHmReview && !isOverdue && (
+      {!isPending && isHmReview && !isOverdue && (
         <p className="text-xs text-orange-600 font-medium mt-1.5">🔍 Awaiting HM</p>
       )}
 
@@ -77,7 +90,9 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop })
     if (id) onDrop(id, stage.id);
   };
 
-  const overdue = candidates.filter(c => c.next_step_due && c.next_step_due < today).length;
+  const pendingCandidates = candidates.filter(c => c._isPending);
+  const activeCandidates  = candidates.filter(c => !c._isPending);
+  const overdue = activeCandidates.filter(c => c.next_step_due && c.next_step_due < today).length;
 
   return (
     <div className="flex flex-col w-56 shrink-0">
@@ -91,6 +106,11 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop })
           <span className="text-xs font-semibold text-slate-700 truncate">{stage.name}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-1">
+          {pendingCandidates.length > 0 && (
+            <span className="text-xs font-bold text-teal-600 bg-teal-100 px-1 rounded">
+              {pendingCandidates.length}⏳
+            </span>
+          )}
           {overdue > 0 && (
             <span className="text-xs font-bold text-red-500">{overdue}!</span>
           )}
@@ -98,7 +118,7 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop })
             className="text-xs font-bold px-1.5 py-0.5 rounded-full"
             style={{ backgroundColor: stage.color + '25', color: stage.color }}
           >
-            {candidates.length}
+            {activeCandidates.length}
           </span>
         </div>
       </div>
@@ -115,7 +135,35 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop })
         }`}
         style={{ minHeight: 120, maxHeight: 'calc(100vh - 230px)' }}
       >
-        {candidates.map(c => (
+        {/* Pending transition candidates — shown at top, visually separated */}
+        {pendingCandidates.length > 0 && (
+          <>
+            <div className="flex items-center gap-1.5 pt-0.5 pb-1">
+              <div className="flex-1 h-px bg-teal-200" />
+              <span className="text-xs text-teal-500 font-medium whitespace-nowrap">HM Approved</span>
+              <div className="flex-1 h-px bg-teal-200" />
+            </div>
+            {pendingCandidates.map(c => (
+              <CandidateCard
+                key={`pending-${c.id}`}
+                candidate={c}
+                today={today}
+                onEdit={onEdit}
+                onDragStart={onDragStart}
+              />
+            ))}
+            {activeCandidates.length > 0 && (
+              <div className="flex items-center gap-1.5 py-1">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-xs text-slate-400 font-medium whitespace-nowrap">In Stage</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Active stage candidates */}
+        {activeCandidates.map(c => (
           <CandidateCard
             key={c.id}
             candidate={c}
@@ -226,8 +274,8 @@ export default function Board() {
 
   /* ── Modal save ── */
   const handleSave = useCallback(async (data) => {
-    const { _resumeFile, _removeResume, ...fields } = data;
-    if (editingCandidate) {
+    const { _resumeFile, _removeResume, _skipSave, ...fields } = data;
+    if (!_skipSave && editingCandidate) {
       await api.updateCandidate(editingCandidate.id, fields);
       if (_removeResume) await api.deleteResume(editingCandidate.id);
       if (_resumeFile)   await api.uploadResume(editingCandidate.id, _resumeFile);
@@ -262,10 +310,16 @@ export default function Board() {
   const activeCandidates = visibleCandidates.filter(c => c.stage_id !== hiredStageId);
 
   // Build stage → candidate list
+  // Candidates with a pending_next_stage_id appear in the TARGET column (flagged _isPending=true)
+  // so recruiters see them separated from candidates still actively in that stage
   const byStage = {};
   for (const s of columns) byStage[s.id] = [];
   for (const c of activeCandidates) {
-    if (byStage[c.stage_id]) byStage[c.stage_id].push(c);
+    if (c.pending_next_stage_id && byStage[c.pending_next_stage_id]) {
+      byStage[c.pending_next_stage_id].push({ ...c, _isPending: true });
+    } else if (byStage[c.stage_id]) {
+      byStage[c.stage_id].push(c);
+    }
   }
 
   // Summary counts (exclude terminal candidates from active/overdue tallies)

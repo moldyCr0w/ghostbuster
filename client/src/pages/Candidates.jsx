@@ -55,22 +55,24 @@ export default function Candidates() {
   };
 
   const handleSave = async (payload) => {
-    const { _resumeFile, _removeResume, ...data } = payload;
+    const { _resumeFile, _removeResume, _skipSave, ...data } = payload;
 
-    let candidateId;
-    if (editing) {
-      await api.updateCandidate(editing.id, data);
-      candidateId = editing.id;
-    } else {
-      const result = await api.createCandidate(data);
-      candidateId = result.id;
-    }
+    if (!_skipSave) {
+      let candidateId;
+      if (editing) {
+        await api.updateCandidate(editing.id, data);
+        candidateId = editing.id;
+      } else {
+        const result = await api.createCandidate(data);
+        candidateId = result.id;
+      }
 
-    // Handle resume after we have a confirmed candidate ID
-    if (_removeResume) {
-      await api.deleteResume(candidateId);
-    } else if (_resumeFile) {
-      await api.uploadResume(candidateId, _resumeFile);
+      // Handle resume after we have a confirmed candidate ID
+      if (_removeResume) {
+        await api.deleteResume(candidateId);
+      } else if (_resumeFile) {
+        await api.uploadResume(candidateId, _resumeFile);
+      }
     }
 
     setModal(false);

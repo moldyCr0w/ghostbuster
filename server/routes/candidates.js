@@ -166,9 +166,12 @@ const WITH_STAGE = `
          s.order_index,
          s.is_terminal,
          s.is_hm_review,
+         ps.name       as pending_stage_name,
+         ps.color      as pending_stage_color,
          ${REQS_SUB}   as reqs_json
   FROM   candidates c
   JOIN   stages s ON c.stage_id = s.id
+  LEFT JOIN stages ps ON c.pending_next_stage_id = ps.id
 `;
 
 function parseRow(row) {
@@ -237,6 +240,37 @@ router.post('/:id/acknowledge', (req, res) => {
         updated_at    = datetime('now')
     WHERE id = ?
   `).run(dueDate, note, note, note, req.params.id);
+
+  res.json({ success: true });
+});
+
+// POST /api/candidates/:id/confirm-advance — TA confirms a pending stage transition
+// Body (optional): { reason: string }
+router.post('/:id/confirm-advance', requireAuth, (req, res) => {
+  const candidate = db.prepare(
+    'SELECT id, pending_next_stage_id FROM candidates WHERE id=?'
+  ).get(req.params.id);
+  if (!candidate) return res.status(404).json({ error: 'Not found' });
+  if (!candidate.pending_next_stage_id) {
+    return res.status(400).json({ error: 'No pending transition for this candidate' });
+  }
+
+  const targetStage = db.prepare('SELECT id, is_hire FROM stages WHERE id=?')
+    .get(candidate.pending_next_stage_id);
+  if (!targetStage) {
+    return res.status(500).json({ error: 'Target stage no longer exists' });
+  }
+
+  const nextDue = targetStage.is_hire ? null : bizDaysFromNow(5);
+
+  db.prepare(`
+    UPDATE candidates
+    SET stage_id = ?, stage_entered_at = datetime('now'),
+        sla_reset_at = NULL, next_step_due = ?,
+        pending_next_stage_id = NULL, pending_reason = NULL,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(targetStage.id, nextDue, req.params.id);
 
   res.json({ success: true });
 });
@@ -348,7 +382,8 @@ router.put('/:id', requireAuth, (req, res) => {
                   e(linkedin_url), e(wd_url), e(notes)];
 
     if (stageChanged) {
-      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL`;
+      // Clear any pending transition when the stage is manually moved
+      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL`;
       if (isHire) {
         sql += `, next_step_due=NULL, hired_for_req_id=?`;
         args.push(hireReqId);
@@ -458,14 +493,25 @@ router.patch('/:id/hm-decision', requireHmAuth, (req, res) => {
     return res.status(500).json({ error: 'Target stage not found — check your stage configuration' });
   }
 
-  const nextDue = targetStage.is_terminal ? null : bizDaysFromNow(5);
-
-  db.prepare(`
-    UPDATE candidates
-    SET stage_id = ?, stage_entered_at = datetime('now'),
-        sla_reset_at = NULL, next_step_due = ?, updated_at = datetime('now')
-    WHERE id = ?
-  `).run(targetStage.id, nextDue, req.params.id);
+  if (decision === 'forward') {
+    // Set pending transition: candidate stays in current stage but is flagged for TA action
+    db.prepare(`
+      UPDATE candidates
+      SET pending_next_stage_id = ?, sla_reset_at = datetime('now'),
+          next_step_due = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(targetStage.id, bizDaysFromNow(5), req.params.id);
+  } else {
+    // Decline: immediately move to rejected/closed
+    db.prepare(`
+      UPDATE candidates
+      SET stage_id = ?, stage_entered_at = datetime('now'),
+          sla_reset_at = NULL, next_step_due = NULL,
+          pending_next_stage_id = NULL, pending_reason = NULL,
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(targetStage.id, req.params.id);
+  }
 
   // Log a notification for the sourcer (recruiter who submitted the candidate)
   try {

@@ -113,15 +113,17 @@ db.exec(`
 
 // Safe migrations for existing databases (no-op if columns already exist)
 [
-  'stage_entered_at     TEXT',
-  'sla_reset_at         TEXT',
-  'first_name           TEXT',
-  'last_name            TEXT',
-  'linkedin_url         TEXT',
-  'wd_url               TEXT',
-  'resume_path          TEXT',
-  'resume_original_name TEXT',
-  'hired_for_req_id     INTEGER',
+  'stage_entered_at       TEXT',
+  'sla_reset_at           TEXT',
+  'first_name             TEXT',
+  'last_name              TEXT',
+  'linkedin_url           TEXT',
+  'wd_url                 TEXT',
+  'resume_path            TEXT',
+  'resume_original_name   TEXT',
+  'hired_for_req_id       INTEGER',
+  'pending_next_stage_id  INTEGER REFERENCES stages(id)',
+  'pending_reason         TEXT',
 ].forEach(col => {
   try { db.exec(`ALTER TABLE candidates ADD COLUMN ${col}`); } catch (_) {}
 });
