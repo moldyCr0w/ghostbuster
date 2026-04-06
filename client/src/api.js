@@ -17,6 +17,7 @@ export const api = {
   updateCandidate:    (id, data)=> req(`/candidates/${id}`,{ method: 'PUT',    body: JSON.stringify(data) }),
   deleteCandidate:    (id)      => req(`/candidates/${id}`,{ method: 'DELETE' }),
   acknowledgeCandidate:(id, data = {}) => req(`/candidates/${id}/acknowledge`, { method: 'POST', body: JSON.stringify(data) }),
+  confirmAdvance:      (id, data = {}) => req(`/candidates/${id}/confirm-advance`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Resume upload / delete / parse (multipart — cannot use the json req() helper)
   uploadResume: (id, file) => {
