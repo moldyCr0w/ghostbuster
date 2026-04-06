@@ -144,13 +144,20 @@ router.post('/', requireAuth, async (req, res) => {
     panelist_emails = [], duration_mins = 60,
     window_start, window_end,
     proposed_start, interview_title,
-    interview_type_id,
+    interview_type_id, req_id,
   } = req.body;
 
   if (!candidate_id) return res.status(400).json({ error: 'candidate_id required' });
 
   const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidate_id);
   if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+
+  // Resolve whiteboard URL from interview type (if set)
+  let whiteboard_url = null;
+  if (interview_type_id) {
+    const it = db.prepare('SELECT whiteboard_url FROM interview_types WHERE id = ?').get(Number(interview_type_id));
+    whiteboard_url = it?.whiteboard_url || null;
+  }
 
   const tk = token();
 
@@ -166,11 +173,18 @@ router.post('/', requireAuth, async (req, res) => {
     let eventStart = proposed_start;
     let eventEnd   = proposedEnd;
 
+    const panelistDesc = whiteboard_url
+      ? `Interview for ${candidate.name}\n\nWhiteboard: ${whiteboard_url}`
+      : `Interview for ${candidate.name}`;
+    const candidateDesc = whiteboard_url
+      ? `Your interview with the team.\n\nWhiteboard: ${whiteboard_url}`
+      : `Your interview with the team.`;
+
     try {
       // 1. Panelist event — generates the Google Meet link
       const result = await createEvent({
         summary:        interview_title || `Interview: ${candidate.name}`,
-        description:    `Interview for ${candidate.name}`,
+        description:    panelistDesc,
         startTime:      proposed_start,
         endTime:        proposedEnd,
         attendeeEmails: panelist_emails,
@@ -182,7 +196,7 @@ router.post('/', requireAuth, async (req, res) => {
       if (candidate.email) {
         await createEvent({
           summary:          interview_title || `Interview: ${candidate.name}`,
-          description:      `Your interview with the team.`,
+          description:      candidateDesc,
           startTime:        proposed_start,
           endTime:          proposedEnd,
           attendeeEmails:   [candidate.email],
@@ -196,12 +210,13 @@ router.post('/', requireAuth, async (req, res) => {
 
     db.prepare(`
       INSERT INTO schedule_links
-        (token, candidate_id, created_by, mode, status, panelist_emails,
+        (token, candidate_id, created_by, req_id, mode, status, panelist_emails,
          duration_mins, proposed_start, proposed_end, interview_title,
          event_id, event_start, event_end, meet_link, interview_type_id)
-      VALUES (?, ?, ?, 'propose', 'booked', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, 'propose', 'booked', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tk, candidate_id, req.user.id,
+      req_id ? Number(req_id) : null,
       JSON.stringify(panelist_emails), duration_mins,
       proposed_start, proposedEnd, interview_title || null,
       eventId, eventStart, eventEnd, meetLink,
@@ -223,11 +238,12 @@ router.post('/', requireAuth, async (req, res) => {
 
   db.prepare(`
     INSERT INTO schedule_links
-      (token, candidate_id, created_by, mode, status, panelist_emails,
+      (token, candidate_id, created_by, req_id, mode, status, panelist_emails,
        duration_mins, window_start, window_end, interview_title, interview_type_id)
-    VALUES (?, ?, ?, 'self-schedule', 'pending', ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, 'self-schedule', 'pending', ?, ?, ?, ?, ?, ?)
   `).run(
     tk, candidate_id, req.user.id,
+    req_id ? Number(req_id) : null,
     JSON.stringify(storedEmails), duration_mins,
     window_start, window_end, interview_title || null,
     interview_type_id ? Number(interview_type_id) : null
@@ -380,6 +396,20 @@ router.post('/:token/book', async (req, res) => {
     assignedEmails = panel.map(p => p.email);
   }
 
+  // Resolve whiteboard URL from interview type for calendar descriptions
+  let bookWhiteboardUrl = null;
+  if (link.interview_type_id) {
+    const it = db.prepare('SELECT whiteboard_url FROM interview_types WHERE id = ?').get(link.interview_type_id);
+    bookWhiteboardUrl = it?.whiteboard_url || null;
+  }
+
+  const panelistDesc = bookWhiteboardUrl
+    ? `Interview for ${candName}\n\nWhiteboard: ${bookWhiteboardUrl}`
+    : `Interview for ${candName}`;
+  const candidateDesc = bookWhiteboardUrl
+    ? `Your interview with the team.\n\nWhiteboard: ${bookWhiteboardUrl}`
+    : `Your interview with the team.`;
+
   let eventId  = null;
   let meetLink = null;
 
@@ -387,7 +417,7 @@ router.post('/:token/book', async (req, res) => {
     // 1. Panelist event — generates the Google Meet link
     const result = await createEvent({
       summary:        link.interview_title || `Interview: ${candName}`,
-      description:    `Interview for ${candName}`,
+      description:    panelistDesc,
       startTime:      slot_start,
       endTime:        new Date(slotEnd).toISOString(),
       attendeeEmails: assignedEmails,
@@ -399,7 +429,7 @@ router.post('/:token/book', async (req, res) => {
     if (candEmail) {
       await createEvent({
         summary:          link.interview_title || `Interview: ${candName}`,
-        description:      `Your interview with the team.`,
+        description:      candidateDesc,
         startTime:        slot_start,
         endTime:          new Date(slotEnd).toISOString(),
         attendeeEmails:   [candEmail],
