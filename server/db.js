@@ -149,6 +149,43 @@ db.exec(`
   WHERE first_name IS NULL AND name IS NOT NULL
 `);
 
+// Back-fill hm_forward notifications for candidates manually moved past HM Review
+// (e.g. during Slack → Ghostbuster transition). Idempotent — skips any candidate
+// that already has an hm_forward or hm_decline notification.
+try {
+  const hmStage = db.prepare("SELECT id, order_index, name FROM stages WHERE is_hm_review = 1").get();
+  if (hmStage) {
+    const alreadyNotified = new Set(
+      db.prepare("SELECT candidate_id FROM notifications WHERE type = 'hm_forward' OR type = 'hm_decline'")
+        .all().map(r => r.candidate_id)
+    );
+    const toBackfill = db.prepare(`
+      SELECT
+        c.id,
+        COALESCE(
+          NULLIF(TRIM(COALESCE(c.first_name,'') || ' ' || COALESCE(c.last_name,'')), ''),
+          c.name
+        ) AS candidate_name
+      FROM  candidates c
+      JOIN  stages s ON c.stage_id = s.id
+      WHERE s.order_index > ${hmStage.order_index}
+        AND NOT (s.is_terminal = 1 AND s.is_hire = 0)
+    `).all().filter(c => !alreadyNotified.has(c.id));
+
+    if (toBackfill.length > 0) {
+      const insert = db.prepare(`
+        INSERT INTO notifications (type, candidate_id, candidate_name, stage_name, decision)
+        VALUES ('hm_forward', ?, ?, ?, 'forward')
+      `);
+      const run = db.transaction(() => {
+        toBackfill.forEach(c => insert.run(c.id, c.candidate_name, hmStage.name));
+      });
+      run();
+      console.log(`[db] Backfilled ${toBackfill.length} hm_forward notification(s) for manually-moved candidates.`);
+    }
+  }
+} catch (e) { console.error('[db] hm_forward backfill error:', e.message); }
+
 // Seed default stages (only on fresh database)
 const stageCount = db.prepare('SELECT COUNT(*) as c FROM stages').get().c;
 if (stageCount === 0) {
