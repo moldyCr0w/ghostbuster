@@ -1,6 +1,7 @@
 const express     = require('express');
 const router      = express.Router();
 const db          = require('../db');
+const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
 
 // GET /api/reqs  — any authenticated user can list reqs
@@ -16,7 +17,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/reqs  — senior_recruiter+
-router.post('/', requireRole('senior_recruiter'), (req, res) => {
+router.post('/', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url } = req.body;
   if (!req_id || !title) return res.status(400).json({ error: 'req_id and title are required' });
   try {
@@ -31,7 +32,7 @@ router.post('/', requireRole('senior_recruiter'), (req, res) => {
 });
 
 // PUT /api/reqs/:id  — senior_recruiter+
-router.put('/:id', requireRole('senior_recruiter'), (req, res) => {
+router.put('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url } = req.body;
   if (!req_id || !title) return res.status(400).json({ error: 'req_id and title are required' });
   try {
@@ -46,7 +47,7 @@ router.put('/:id', requireRole('senior_recruiter'), (req, res) => {
 });
 
 // DELETE /api/reqs/:id  — senior_recruiter+
-router.delete('/:id', requireRole('senior_recruiter'), (req, res) => {
+router.delete('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const linked = db.prepare(
     'SELECT COUNT(*) as c FROM candidate_reqs WHERE req_id=?'
   ).get(req.params.id).c;
@@ -68,7 +69,7 @@ router.get('/:id/scorecard', (req, res) => {
 });
 
 // POST /api/reqs/:id/scorecard  — senior_recruiter+
-router.post('/:id/scorecard', requireRole('senior_recruiter'), (req, res) => {
+router.post('/:id/scorecard', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { name } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   const maxOrder = db.prepare(
@@ -81,7 +82,7 @@ router.post('/:id/scorecard', requireRole('senior_recruiter'), (req, res) => {
 });
 
 // PUT /api/reqs/:id/scorecard/:criterionId  — senior_recruiter+
-router.put('/:id/scorecard/:criterionId', requireRole('senior_recruiter'), (req, res) => {
+router.put('/:id/scorecard/:criterionId', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { name, order_index } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
   db.prepare(
@@ -91,7 +92,7 @@ router.put('/:id/scorecard/:criterionId', requireRole('senior_recruiter'), (req,
 });
 
 // DELETE /api/reqs/:id/scorecard/:criterionId  — senior_recruiter+
-router.delete('/:id/scorecard/:criterionId', requireRole('senior_recruiter'), (req, res) => {
+router.delete('/:id/scorecard/:criterionId', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   db.prepare(
     'DELETE FROM scorecard_criteria WHERE id = ? AND req_id = ?'
   ).run(req.params.criterionId, req.params.id);
