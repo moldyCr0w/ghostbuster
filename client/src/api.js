@@ -74,9 +74,10 @@ export const api = {
   deleteCriterion:  (reqId, cid)       => req(`/reqs/${reqId}/scorecard/${cid}`, { method: 'DELETE' }),
 
   // ── Users (admin) ────────────────────────────────────────────
-  getUsers:    ()        => req('/users'),
-  createUser:  (data)    => req('/users',      { method: 'POST',   body: JSON.stringify(data) }),
-  deleteUser:  (id)      => req(`/users/${id}`,{ method: 'DELETE' }),
+  getUsers:        ()           => req('/users'),
+  createUser:      (data)       => req('/users',            { method: 'POST',   body: JSON.stringify(data) }),
+  updateUserRole:  (id, role)   => req(`/users/${id}/role`, { method: 'PATCH',  body: JSON.stringify({ role }) }),
+  deleteUser:      (id)         => req(`/users/${id}`,      { method: 'DELETE' }),
 
   // ── Notifications ─────────────────────────────────────────────
   getNotifications:  ()    => req('/notifications'),

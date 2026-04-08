@@ -66,6 +66,7 @@ export default function Settings() {
   const [userForm, setUserForm]     = useState({ name: '', email: '', role: 'recruiter' });
   const [userError, setUserError]   = useState('');
   const [pinInfo, setPinInfo]       = useState(null); // { name, pin } for display after creation
+  const [editingRoleId, setEditingRoleId] = useState(null); // id of user whose role is being edited
 
   // ── HM Users state ───────────────────────────────────────────
   const [hmUsers, setHmUsers]         = useState([]);
@@ -181,6 +182,12 @@ export default function Settings() {
 
   const handleDeleteUser = async (u) => {
     await api.deleteUser(u.id);
+    load();
+  };
+
+  const handleRoleChange = async (userId, newRole) => {
+    await api.updateUserRole(userId, newRole);
+    setEditingRoleId(null);
     load();
   };
 
@@ -562,26 +569,59 @@ export default function Settings() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-slate-800">{u.name}</span>
-                      <span className={`px-1.5 py-0.5 text-xs rounded-full font-medium ${
-                        u.role === 'admin'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {u.role}
-                      </span>
+                      {editingRoleId === u.id ? (
+                        <select
+                          autoFocus
+                          defaultValue={u.role}
+                          onChange={e => handleRoleChange(u.id, e.target.value)}
+                          onBlur={() => setEditingRoleId(null)}
+                          className="border border-slate-300 rounded-lg px-2 py-0.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="recruiter">Recruiter</option>
+                          <option value="senior_recruiter">Senior Recruiter</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      ) : (
+                        <span className={`px-1.5 py-0.5 text-xs rounded-full font-medium ${
+                          u.role === 'admin'
+                            ? 'bg-purple-100 text-purple-700'
+                            : u.role === 'senior_recruiter'
+                            ? 'bg-teal-100 text-teal-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {u.role === 'senior_recruiter' ? 'Senior Recruiter' : u.role}
+                        </span>
+                      )}
                       {me?.email === u.email && (
                         <span className="text-xs text-slate-400">(you)</span>
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
                   </div>
-                  {me?.email !== u.email && (
-                    <button
-                      onClick={() => handleDeleteUser(u)}
-                      className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
-                    >
-                      Remove
-                    </button>
+                  {me?.role === 'admin' && me?.email !== u.email && (
+                    <div className="flex items-center gap-2">
+                      {editingRoleId === u.id ? (
+                        <button
+                          onClick={() => setEditingRoleId(null)}
+                          className="px-2.5 py-1 text-xs bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200"
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setEditingRoleId(u.id)}
+                          className="px-2.5 py-1 text-xs bg-slate-50 text-slate-600 rounded-lg hover:bg-slate-100 border border-slate-200"
+                        >
+                          Edit Role
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteUser(u)}
+                        className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   )}
                 </li>
               ))}
@@ -595,50 +635,53 @@ export default function Settings() {
           </p>
         )}
 
-        {/* Add user form */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Add User</h3>
-          <form onSubmit={handleAddUser} className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Full Name *</label>
-              <input
-                required
-                value={userForm.name}
-                onChange={e => setUserForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Jane Smith"
-                className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex-1 min-w-48">
-              <label className="block text-xs text-slate-500 mb-1">Email *</label>
-              <input
-                required
-                type="email"
-                value={userForm.email}
-                onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="jane@company.com"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Role</label>
-              <select
-                value={userForm.role}
-                onChange={e => setUserForm(f => ({ ...f, role: e.target.value }))}
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        {/* Add user form — admin only */}
+        {me?.role === 'admin' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">Add User</h3>
+            <form onSubmit={handleAddUser} className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Full Name *</label>
+                <input
+                  required
+                  value={userForm.name}
+                  onChange={e => setUserForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Jane Smith"
+                  className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex-1 min-w-48">
+                <label className="block text-xs text-slate-500 mb-1">Email *</label>
+                <input
+                  required
+                  type="email"
+                  value={userForm.email}
+                  onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="jane@company.com"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Role</label>
+                <select
+                  value={userForm.role}
+                  onChange={e => setUserForm(f => ({ ...f, role: e.target.value }))}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="recruiter">Recruiter</option>
+                  <option value="senior_recruiter">Senior Recruiter</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <option value="recruiter">Recruiter</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Add User
-            </button>
-          </form>
-        </div>
+                Add User
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* ── Hiring Managers ──────────────────────────────────── */}
@@ -688,7 +731,7 @@ export default function Settings() {
             <ul className="divide-y divide-slate-100">
               {hmUsers.map(u => (
                 <li key={u.id} className="px-4 py-3">
-                  {editingHmId === u.id ? (
+                  {me?.role === 'admin' && editingHmId === u.id ? (
                     <form onSubmit={handleUpdateHmUser} className="flex flex-wrap gap-2 items-center">
                       <input
                         required
@@ -713,18 +756,22 @@ export default function Settings() {
                         <span className="text-sm font-medium text-slate-800">{u.name}</span>
                         <p className="text-xs text-slate-400 mt-0.5">{u.email}</p>
                       </div>
-                      <button
-                        onClick={() => startEditHmUser(u)}
-                        className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteHmUser(u)}
-                        className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
-                      >
-                        Remove
-                      </button>
+                      {me?.role === 'admin' && (
+                        <>
+                          <button
+                            onClick={() => startEditHmUser(u)}
+                            className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteHmUser(u)}
+                            className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </li>
@@ -739,39 +786,41 @@ export default function Settings() {
           </p>
         )}
 
-        {/* Add HM form */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">Add Hiring Manager</h3>
-          <form onSubmit={handleAddHmUser} className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Full Name *</label>
-              <input
-                required
-                value={hmUserForm.name}
-                onChange={e => setHmUserForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Alex Johnson"
-                className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex-1 min-w-48">
-              <label className="block text-xs text-slate-500 mb-1">Work Email *</label>
-              <input
-                required
-                type="email"
-                value={hmUserForm.email}
-                onChange={e => setHmUserForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="alex@company.com"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Add HM
-            </button>
-          </form>
-        </div>
+        {/* Add HM form — admin only */}
+        {me?.role === 'admin' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3">Add Hiring Manager</h3>
+            <form onSubmit={handleAddHmUser} className="flex flex-wrap gap-3 items-end">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Full Name *</label>
+                <input
+                  required
+                  value={hmUserForm.name}
+                  onChange={e => setHmUserForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Alex Johnson"
+                  className="w-36 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex-1 min-w-48">
+                <label className="block text-xs text-slate-500 mb-1">Work Email *</label>
+                <input
+                  required
+                  type="email"
+                  value={hmUserForm.email}
+                  onChange={e => setHmUserForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="alex@company.com"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Add HM
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* ── Interview Qualification Tags ─────────────────────── */}
