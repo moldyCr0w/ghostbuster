@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const db          = require('../db');
 const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
 
 const VALID_LEVELS = ['senior', 'staff_plus'];
 
@@ -51,8 +52,8 @@ router.get('/:id', requireAuth, (req, res) => {
   res.json(expandTags(p));
 });
 
-// POST /api/panelists
-router.post('/', requireAuth, (req, res) => {
+// POST /api/panelists  — senior_recruiter+
+router.post('/', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { name, email, title = '', qualifications = [], interview_levels = [] } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
   if (!email?.trim()) return res.status(400).json({ error: 'Email is required' });
@@ -74,8 +75,8 @@ router.post('/', requireAuth, (req, res) => {
   }
 });
 
-// PUT /api/panelists/:id
-router.put('/:id', requireAuth, (req, res) => {
+// PUT /api/panelists/:id  — senior_recruiter+
+router.put('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const existing = db.prepare('SELECT * FROM panelists WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
@@ -105,8 +106,8 @@ router.put('/:id', requireAuth, (req, res) => {
   }
 });
 
-// DELETE /api/panelists/:id
-router.delete('/:id', requireAuth, (req, res) => {
+// DELETE /api/panelists/:id  — senior_recruiter+
+router.delete('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const result = db.prepare('DELETE FROM panelists WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });

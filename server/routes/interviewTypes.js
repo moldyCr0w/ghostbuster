@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const db          = require('../db');
 const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
 
 const VALID_LEVELS      = ['senior', 'staff_plus'];
 const VALID_CATEGORIES  = ['hm', 'pair_coding', 'architectural_design', 'em_pm', 'custom'];
@@ -20,8 +21,8 @@ router.get('/', requireAuth, (_req, res) => {
   res.json(rows.map(expandType));
 });
 
-// POST /api/interview-types
-router.post('/', requireAuth, (req, res) => {
+// POST /api/interview-types  — senior_recruiter+
+router.post('/', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const {
     name, duration_mins = 60,
     level_requirement = 'senior',
@@ -57,8 +58,8 @@ router.post('/', requireAuth, (req, res) => {
   }
 });
 
-// PUT /api/interview-types/:id
-router.put('/:id', requireAuth, (req, res) => {
+// PUT /api/interview-types/:id  — senior_recruiter+
+router.put('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const existing = db.prepare('SELECT * FROM interview_types WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
 
@@ -100,8 +101,8 @@ router.put('/:id', requireAuth, (req, res) => {
   }
 });
 
-// DELETE /api/interview-types/:id
-router.delete('/:id', requireAuth, (req, res) => {
+// DELETE /api/interview-types/:id  — senior_recruiter+
+router.delete('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const result = db.prepare('DELETE FROM interview_types WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
   res.json({ ok: true });

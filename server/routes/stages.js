@@ -1,12 +1,16 @@
-const express = require('express');
-const router  = express.Router();
-const db      = require('../db');
+const express     = require('express');
+const router      = express.Router();
+const db          = require('../db');
+const requireAuth = require('../middleware/requireAuth');
+const requireRole = require('../middleware/requireRole');
 
-router.get('/', (req, res) => {
+// GET /api/stages  — any authenticated user
+router.get('/', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM stages ORDER BY order_index').all());
 });
 
-router.post('/', (req, res) => {
+// POST /api/stages  — admin only
+router.post('/', requireAuth, requireRole('admin'), (req, res) => {
   const { name, color, is_terminal, is_hire } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
   const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM stages').get().m || 0;
@@ -16,7 +20,8 @@ router.post('/', (req, res) => {
   res.status(201).json({ id: r.lastInsertRowid });
 });
 
-router.put('/:id', (req, res) => {
+// PUT /api/stages/:id  — admin only
+router.put('/:id', requireAuth, requireRole('admin'), (req, res) => {
   const { name, color, order_index, is_terminal, is_hire } = req.body;
   db.prepare(
     'UPDATE stages SET name=?, color=?, order_index=?, is_terminal=?, is_hire=? WHERE id=?'
@@ -24,7 +29,8 @@ router.put('/:id', (req, res) => {
   res.json({ success: true });
 });
 
-router.delete('/:id', (req, res) => {
+// DELETE /api/stages/:id  — admin only
+router.delete('/:id', requireAuth, requireRole('admin'), (req, res) => {
   const inUse = db.prepare('SELECT COUNT(*) as c FROM candidates WHERE stage_id=?').get(req.params.id).c;
   if (inUse > 0) return res.status(400).json({ error: `Cannot delete — ${inUse} candidate(s) are in this stage` });
   db.prepare('DELETE FROM stages WHERE id=?').run(req.params.id);
