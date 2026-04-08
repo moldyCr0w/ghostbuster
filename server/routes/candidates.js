@@ -365,10 +365,12 @@ router.put('/:id', requireAuth, (req, res) => {
   // Check whether the new stage is a "hire" stage
   let isHire    = false;
   let hireReqId = null;
+  let requiresScheduling = false;
   if (stageChanged) {
-    const newStage = db.prepare('SELECT is_hire FROM stages WHERE id=?').get(stage_id);
-    isHire    = !!newStage?.is_hire;
-    hireReqId = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
+    const newStage = db.prepare('SELECT is_hire, requires_scheduling FROM stages WHERE id=?').get(stage_id);
+    isHire             = !!newStage?.is_hire;
+    requiresScheduling = !!newStage?.requires_scheduling;
+    hireReqId          = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
   }
 
   const tx = db.transaction(() => {
@@ -386,13 +388,19 @@ router.put('/:id', requireAuth, (req, res) => {
 
     if (stageChanged) {
       // Clear any pending transition when the stage is manually moved
-      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL`;
-      if (isHire) {
-        sql += `, next_step_due=NULL, hired_for_req_id=?`;
-        args.push(hireReqId);
+      sql += `, sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL`;
+      if (requiresScheduling) {
+        // Half-stage: pause SLA until scheduling is confirmed
+        sql += `, schedule_pending=1`;
       } else {
-        sql += `, next_step_due=?, hired_for_req_id=NULL`;
-        args.push(bizDaysFromNow(5));
+        sql += `, stage_entered_at=datetime('now'), schedule_pending=0`;
+        if (isHire) {
+          sql += `, next_step_due=NULL, hired_for_req_id=?`;
+          args.push(hireReqId);
+        } else {
+          sql += `, next_step_due=?, hired_for_req_id=NULL`;
+          args.push(bizDaysFromNow(5));
+        }
       }
     }
 
@@ -441,6 +449,25 @@ router.put('/:id', requireAuth, (req, res) => {
       }
     }
   }
+
+  res.json({ success: true });
+});
+
+// PATCH /api/candidates/:id/confirm-scheduled — confirm interview has been booked, start SLA
+router.patch('/:id/confirm-scheduled', requireAuth, (req, res) => {
+  const candidate = db.prepare('SELECT id, schedule_pending FROM candidates WHERE id=?').get(req.params.id);
+  if (!candidate) return res.status(404).json({ error: 'Not found' });
+  if (!candidate.schedule_pending) {
+    return res.status(400).json({ error: 'Candidate is not pending scheduling' });
+  }
+
+  db.prepare(`
+    UPDATE candidates
+    SET schedule_pending=0, stage_entered_at=datetime('now'),
+        sla_reset_at=NULL, next_step_due=?,
+        updated_at=datetime('now')
+    WHERE id=?
+  `).run(bizDaysFromNow(5), req.params.id);
 
   res.json({ success: true });
 });
