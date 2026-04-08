@@ -425,4 +425,45 @@ try {
   if (elId) db.prepare("UPDATE interview_types SET required_tag_id = ? WHERE category = 'pair_coding' AND stack = 'elixir'     AND required_tag_id IS NULL").run(elId);
 } catch (_) {}
 
+// Feature: Pending Scheduling half-stage
+try { db.prepare('ALTER TABLE stages ADD COLUMN requires_scheduling INTEGER DEFAULT 0').run(); } catch (_) {}
+try { db.prepare('ALTER TABLE candidates ADD COLUMN schedule_pending INTEGER DEFAULT 0').run(); } catch (_) {}
+
+// Feature: Per-req interview plans
+db.exec(`
+  CREATE TABLE IF NOT EXISTS req_interview_plans (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    req_id            INTEGER NOT NULL REFERENCES reqs(id) ON DELETE CASCADE,
+    stage_id          INTEGER NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+    interview_name    TEXT    NOT NULL,
+    interview_type_id INTEGER REFERENCES interview_types(id),
+    notes             TEXT,
+    order_index       INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(req_id, stage_id)
+  );
+`);
+
+// Feature: Pokédex knowledge hub
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pokedex_categories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS pokedex_entries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_id INTEGER NOT NULL REFERENCES pokedex_categories(id) ON DELETE CASCADE,
+    type        TEXT    NOT NULL CHECK(type IN ('link', 'note')),
+    title       TEXT    NOT NULL,
+    body        TEXT,
+    url         TEXT,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_by  INTEGER REFERENCES users(id),
+    created_at  TEXT    DEFAULT (datetime('now')),
+    updated_at  TEXT    DEFAULT (datetime('now'))
+  );
+`);
+
 module.exports = db;

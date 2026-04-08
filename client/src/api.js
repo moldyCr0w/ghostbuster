@@ -18,6 +18,7 @@ export const api = {
   deleteCandidate:    (id)      => req(`/candidates/${id}`,{ method: 'DELETE' }),
   acknowledgeCandidate:(id, data = {}) => req(`/candidates/${id}/acknowledge`, { method: 'POST', body: JSON.stringify(data) }),
   confirmAdvance:      (id, data = {}) => req(`/candidates/${id}/confirm-advance`, { method: 'POST', body: JSON.stringify(data) }),
+  confirmScheduled:    (id)            => req(`/candidates/${id}/confirm-scheduled`, { method: 'PATCH' }),
 
   // Resume upload / delete / parse (multipart — cannot use the json req() helper)
   uploadResume: (id, file) => {
@@ -67,6 +68,12 @@ export const api = {
   createReq:  (data)    => req('/reqs',      { method: 'POST', body: JSON.stringify(data) }),
   updateReq:  (id, data)=> req(`/reqs/${id}`,{ method: 'PUT',  body: JSON.stringify(data) }),
   deleteReq:  (id)      => req(`/reqs/${id}`,{ method: 'DELETE' }),
+
+  // ── Per-req interview plans ───────────────────────────────
+  getReqInterviewPlan:      (reqId)          => req(`/reqs/${reqId}/interview-plan`),
+  addInterviewPlanEntry:    (reqId, data)    => req(`/reqs/${reqId}/interview-plan`, { method: 'POST', body: JSON.stringify(data) }),
+  updateInterviewPlanEntry: (reqId, id, data)=> req(`/reqs/${reqId}/interview-plan/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteInterviewPlanEntry: (reqId, id)      => req(`/reqs/${reqId}/interview-plan/${id}`, { method: 'DELETE' }),
 
   // ── Scorecard criteria ─────────────────────────────────────
   getScorecard:     (reqId)            => req(`/reqs/${reqId}/scorecard`),
@@ -124,6 +131,15 @@ export const api = {
   createInterviewType:  (data)     => req('/interview-types',       { method: 'POST',   body: JSON.stringify(data) }),
   updateInterviewType:  (id, data) => req(`/interview-types/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
   deleteInterviewType:  (id)       => req(`/interview-types/${id}`, { method: 'DELETE' }),
+
+  // ── Pokédex ────────────────────────────────────────────────────
+  getPokedex:            ()       => req('/pokedex'),
+  createPokedexCategory: (data)   => req('/pokedex/categories',       { method: 'POST',   body: JSON.stringify(data) }),
+  updatePokedexCategory: (id, data)=> req(`/pokedex/categories/${id}`,{ method: 'PUT',    body: JSON.stringify(data) }),
+  deletePokedexCategory: (id)     => req(`/pokedex/categories/${id}`, { method: 'DELETE' }),
+  createPokedexEntry:    (data)   => req('/pokedex/entries',          { method: 'POST',   body: JSON.stringify(data) }),
+  updatePokedexEntry:    (id, data)=> req(`/pokedex/entries/${id}`,   { method: 'PUT',    body: JSON.stringify(data) }),
+  deletePokedexEntry:    (id)     => req(`/pokedex/entries/${id}`,    { method: 'DELETE' }),
 
   // ── Scheduling ─────────────────────────────────────────────────
   createScheduleLink: (data)        => req('/schedule',                   { method: 'POST', body: JSON.stringify(data) }),
