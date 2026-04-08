@@ -5,19 +5,21 @@ import { localToday } from '../utils/dates';
 import CandidateModal from '../components/CandidateModal';
 
 /* ── Candidate card ──────────────────────────────────────────────── */
-function CandidateCard({ candidate, today, onEdit, onDragStart }) {
-  const isOverdue  = candidate.next_step_due && candidate.next_step_due < today;
-  const isHmReview = !!candidate.is_hm_review;
+function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmScheduled }) {
+  const isOverdue       = candidate.next_step_due && candidate.next_step_due < today;
+  const isHmReview      = !!candidate.is_hm_review;
+  const isSchedPending  = !!candidate.schedule_pending;
 
   return (
     <div
-      draggable
-      onDragStart={e => onDragStart(e, candidate.id)}
+      draggable={!isSchedPending}
+      onDragStart={isSchedPending ? undefined : e => onDragStart(e, candidate.id)}
       onClick={() => onEdit(candidate)}
-      className={`bg-white rounded-lg border p-3 cursor-pointer hover:shadow-md active:opacity-70 transition-shadow select-none ${
-        isOverdue   ? 'border-red-300 bg-red-50' :
-        isHmReview  ? 'border-orange-300 bg-orange-50' :
-        'border-slate-200'
+      className={`rounded-lg border p-3 cursor-pointer hover:shadow-md active:opacity-70 transition-shadow select-none ${
+        isSchedPending  ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300' :
+        isOverdue       ? 'border-red-300 bg-red-50' :
+        isHmReview      ? 'border-orange-300 bg-orange-50' :
+        'bg-white border-slate-200'
       }`}
     >
       {/* Name */}
@@ -45,11 +47,24 @@ function CandidateCard({ candidate, today, onEdit, onDragStart }) {
       )}
 
       {/* Status tags */}
-      {isOverdue && (
+      {isSchedPending && (
+        <p className="text-xs text-amber-700 font-semibold mt-1.5">📅 Pending Scheduling</p>
+      )}
+      {isOverdue && !isSchedPending && (
         <p className="text-xs text-red-600 font-semibold mt-1.5">🚨 SLA overdue</p>
       )}
-      {isHmReview && !isOverdue && (
+      {isHmReview && !isOverdue && !isSchedPending && (
         <p className="text-xs text-orange-600 font-medium mt-1.5">🔍 Awaiting HM</p>
+      )}
+
+      {/* Confirm Scheduled button */}
+      {isSchedPending && onConfirmScheduled && (
+        <button
+          onClick={e => { e.stopPropagation(); onConfirmScheduled(candidate.id); }}
+          className="mt-2 w-full px-2 py-1.5 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold transition-colors"
+        >
+          ✓ Confirm Scheduled
+        </button>
       )}
 
       {/* Resume indicator */}
@@ -61,7 +76,7 @@ function CandidateCard({ candidate, today, onEdit, onDragStart }) {
 }
 
 /* ── Kanban column ───────────────────────────────────────────────── */
-function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop }) {
+function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, onConfirmScheduled }) {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = e => {
@@ -122,6 +137,7 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop })
             today={today}
             onEdit={onEdit}
             onDragStart={onDragStart}
+            onConfirmScheduled={onConfirmScheduled}
           />
         ))}
         {candidates.length === 0 && (
@@ -195,12 +211,13 @@ export default function Board() {
         x.id === candidateId
           ? {
               ...x,
-              stage_id:    newStageId,
-              stage_name:  newStageData?.name  ?? x.stage_name,
-              stage_color: newStageData?.color ?? x.stage_color,
-              order_index: newStageData?.order_index ?? x.order_index,
-              is_hm_review: newStageData?.is_hm_review ?? 0,
-              is_terminal:  newStageData?.is_terminal  ?? 0,
+              stage_id:         newStageId,
+              stage_name:       newStageData?.name  ?? x.stage_name,
+              stage_color:      newStageData?.color ?? x.stage_color,
+              order_index:      newStageData?.order_index ?? x.order_index,
+              is_hm_review:     newStageData?.is_hm_review ?? 0,
+              is_terminal:      newStageData?.is_terminal  ?? 0,
+              schedule_pending: newStageData?.requires_scheduling ? 1 : 0,
             }
           : x
       )
@@ -223,6 +240,13 @@ export default function Board() {
     const fresh = await api.getCandidates();
     setCandidates(fresh);
   }, [candidates, stages]);
+
+  /* ── Confirm scheduled ── */
+  const handleConfirmScheduled = useCallback(async (id) => {
+    await api.confirmScheduled(id);
+    const fresh = await api.getCandidates();
+    setCandidates(fresh);
+  }, []);
 
   /* ── Modal save ── */
   const handleSave = useCallback(async (data) => {
@@ -350,6 +374,7 @@ export default function Board() {
               onEdit={setEditingCandidate}
               onDragStart={handleDragStart}
               onDrop={handleDrop}
+              onConfirmScheduled={handleConfirmScheduled}
             />
           ))}
 

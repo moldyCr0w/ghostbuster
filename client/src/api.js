@@ -124,6 +124,24 @@ export const api = {
   updateInterviewType:  (id, data) => req(`/interview-types/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
   deleteInterviewType:  (id)       => req(`/interview-types/${id}`, { method: 'DELETE' }),
 
+  // ── Scheduling confirmation (half-stage) ──────────────────────
+  confirmScheduled: (id) => req(`/candidates/${id}/confirm-scheduled`, { method: 'PATCH' }),
+
+  // ── Req interview plans ────────────────────────────────────────
+  getReqInterviewPlan:      (reqId)             => req(`/reqs/${reqId}/interview-plan`),
+  addInterviewPlanEntry:    (reqId, data)        => req(`/reqs/${reqId}/interview-plan`,     { method: 'POST',   body: JSON.stringify(data) }),
+  updateInterviewPlanEntry: (reqId, id, data)    => req(`/reqs/${reqId}/interview-plan/${id}`, { method: 'PUT',  body: JSON.stringify(data) }),
+  deleteInterviewPlanEntry: (reqId, id)          => req(`/reqs/${reqId}/interview-plan/${id}`, { method: 'DELETE' }),
+
+  // ── Pokédex ────────────────────────────────────────────────────
+  getPokedex:             ()         => req('/pokedex'),
+  createPokedexCategory:  (data)     => req('/pokedex/categories',       { method: 'POST',   body: JSON.stringify(data) }),
+  updatePokedexCategory:  (id, data) => req(`/pokedex/categories/${id}`, { method: 'PUT',    body: JSON.stringify(data) }),
+  deletePokedexCategory:  (id)       => req(`/pokedex/categories/${id}`, { method: 'DELETE' }),
+  createPokedexEntry:     (data)     => req('/pokedex/entries',          { method: 'POST',   body: JSON.stringify(data) }),
+  updatePokedexEntry:     (id, data) => req(`/pokedex/entries/${id}`,    { method: 'PUT',    body: JSON.stringify(data) }),
+  deletePokedexEntry:     (id)       => req(`/pokedex/entries/${id}`,    { method: 'DELETE' }),
+
   // ── Scheduling ─────────────────────────────────────────────────
   createScheduleLink: (data)        => req('/schedule',                   { method: 'POST', body: JSON.stringify(data) }),
   getScheduleLinks:   (candId)      => req(`/schedule/candidate/${candId}`),

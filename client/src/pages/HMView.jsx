@@ -285,6 +285,7 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
   const [deciding, setDeciding]               = useState(null);
   const [scorecard, setScorecard]             = useState(null); // null=loading, []=none, [{...}]=loaded
   const [scorecardReqTitle, setScorecardReqTitle] = useState('');
+  const [interviewPlan, setInterviewPlan]     = useState(null); // null=loading
 
   const stage = stages.find(s => s.id === candidate.stage_id);
   const isHmReview = !!stage?.is_hm_review;
@@ -293,6 +294,15 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
     api.getVideoNotes(candidate.id)
       .then(data => setVideoNotes(Array.isArray(data) ? data : []))
       .catch(() => setVideoNotes([]));
+  }, [candidate.id]);
+
+  // Load interview plan for the candidate's first linked req
+  useEffect(() => {
+    const firstReq = candidate.reqs?.[0];
+    if (!firstReq) { setInterviewPlan([]); return; }
+    api.getReqInterviewPlan(firstReq.id)
+      .then(data => setInterviewPlan(Array.isArray(data) ? data : []))
+      .catch(() => setInterviewPlan([]));
   }, [candidate.id]);
 
   // Load scorecard — find the first linked req that has scores
@@ -530,6 +540,53 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
               </div>
             )}
           </div>
+
+          {/* Interview Process */}
+          {interviewPlan !== null && interviewPlan.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Interview Process</p>
+              <ol className="space-y-1.5">
+                {interviewPlan.map((entry, i) => {
+                  const isCurrent = entry.stage_id === candidate.stage_id;
+                  return (
+                    <li
+                      key={entry.id}
+                      className={`flex items-start gap-2.5 px-3 py-2 rounded-lg text-sm ${
+                        isCurrent
+                          ? 'bg-blue-50 border border-blue-200'
+                          : 'bg-slate-50 border border-slate-100'
+                      }`}
+                    >
+                      <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${
+                        isCurrent ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}>
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`font-medium ${isCurrent ? 'text-blue-800' : 'text-slate-700'}`}>
+                            {entry.interview_name}
+                          </span>
+                          {isCurrent && (
+                            <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full font-semibold leading-none">
+                              Current
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-xs ${isCurrent ? 'text-blue-600' : 'text-slate-400'}`}>
+                          {entry.stage_name}
+                          {entry.interview_type_name ? ` · ${entry.interview_type_name}` : ''}
+                        </span>
+                        {entry.notes && (
+                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{entry.notes}</p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
 
           {/* Add HM note */}
           <div>

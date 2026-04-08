@@ -325,22 +325,25 @@ router.put('/:id', requireAuth, (req, res) => {
   const existing     = db.prepare('SELECT stage_id FROM candidates WHERE id=?').get(req.params.id);
   const stageChanged = existing && Number(existing.stage_id) !== Number(stage_id);
 
-  // Check whether the new stage is a "hire" stage
-  let isHire    = false;
-  let hireReqId = null;
+  // Check whether the new stage is a "hire" stage or requires scheduling
+  let isHire           = false;
+  let hireReqId        = null;
+  let reqsScheduling   = false;
   if (stageChanged) {
-    const newStage = db.prepare('SELECT is_hire FROM stages WHERE id=?').get(stage_id);
-    isHire    = !!newStage?.is_hire;
-    hireReqId = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
+    const newStage = db.prepare('SELECT is_hire, requires_scheduling FROM stages WHERE id=?').get(stage_id);
+    isHire          = !!newStage?.is_hire;
+    reqsScheduling  = !!newStage?.requires_scheduling;
+    hireReqId       = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
   }
 
   const tx = db.transaction(() => {
     const composed = [first_name, last_name].filter(Boolean).join(' ');
 
-    // Build the UPDATE dynamically so we can handle three cases:
-    //   1. Stage didn't change     → just update fields
-    //   2. Stage → hire stage      → NULL out deadline, store hired_for_req_id, auto-fill req
-    //   3. Stage → non-hire stage  → reset SLA deadline, clear hired_for_req_id
+    // Build the UPDATE dynamically to handle four cases:
+    //   1. Stage didn't change           → just update fields
+    //   2. Stage → hire stage            → NULL out deadline, store hired_for_req_id, auto-fill req
+    //   3. Stage → requires_scheduling   → set schedule_pending=1, skip SLA
+    //   4. Stage → non-hire/normal stage → reset SLA deadline, clear hired_for_req_id
     let sql    = `UPDATE candidates SET name=?, first_name=?, last_name=?,
                     email=?, stage_id=?, linkedin_url=?, wd_url=?, notes=?,
                     updated_at=datetime('now')`;
@@ -348,12 +351,14 @@ router.put('/:id', requireAuth, (req, res) => {
                   e(linkedin_url), e(wd_url), e(notes)];
 
     if (stageChanged) {
-      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL`;
-      if (isHire) {
-        sql += `, next_step_due=NULL, hired_for_req_id=?`;
+      if (reqsScheduling) {
+        sql += `, schedule_pending=1, sla_reset_at=NULL`;
+        // Do NOT set stage_entered_at or next_step_due — SLA starts only after scheduling confirmed
+      } else if (isHire) {
+        sql += `, schedule_pending=0, stage_entered_at=datetime('now'), sla_reset_at=NULL, next_step_due=NULL, hired_for_req_id=?`;
         args.push(hireReqId);
       } else {
-        sql += `, next_step_due=?, hired_for_req_id=NULL`;
+        sql += `, schedule_pending=0, stage_entered_at=datetime('now'), sla_reset_at=NULL, next_step_due=?, hired_for_req_id=NULL`;
         args.push(bizDaysFromNow(5));
       }
     }
@@ -404,6 +409,18 @@ router.put('/:id', requireAuth, (req, res) => {
     }
   }
 
+  res.json({ success: true });
+});
+
+// PATCH /api/candidates/:id/confirm-scheduled — clear schedule_pending, start SLA
+router.patch('/:id/confirm-scheduled', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT id, schedule_pending FROM candidates WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (!row.schedule_pending) return res.status(400).json({ error: 'Candidate is not pending scheduling' });
+  db.prepare(`
+    UPDATE candidates SET schedule_pending=0, stage_entered_at=datetime('now'),
+    next_step_due=?, updated_at=datetime('now') WHERE id=?
+  `).run(bizDaysFromNow(5), req.params.id);
   res.json({ success: true });
 });
 

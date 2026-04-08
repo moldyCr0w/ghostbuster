@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_STYLES = {
   open:     'bg-green-100 text-green-700 border border-green-200',
@@ -11,14 +12,29 @@ const STATUS_LABELS = { open: 'Open', on_hold: 'On Hold', closed: 'Closed' };
 const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', hiring_manager: '', recruiter: '', script_doc_url: '' };
 
 export default function Reqs() {
+  const { user: me }            = useAuth();
+  const canEdit                 = me?.role === 'senior_recruiter' || me?.role === 'admin';
+
   const [reqs, setReqs]         = useState([]);
   const [form, setForm]         = useState(EMPTY_FORM);
   const [editId, setEditId]     = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(true);
-  const [users, setUsers]       = useState([]);   // recruiters (also sourcers)
-  const [hmUsers, setHmUsers]   = useState([]);   // hiring managers
+  const [users, setUsers]       = useState([]);
+  const [hmUsers, setHmUsers]   = useState([]);
+
+  // ── Interview plan state ─────────────────────────────────────
+  const [stages, setStages]               = useState([]);
+  const [interviewTypes, setInterviewTypes] = useState([]);
+  const [expandedPlanId, setExpandedPlanId] = useState(null);
+  const [planEntries, setPlanEntries]     = useState({});   // { [reqId]: entries[] }
+  const [planLoading, setPlanLoading]     = useState(false);
+  const [planForm, setPlanForm]           = useState({ stage_id: '', interview_name: '', interview_type_id: '', notes: '' });
+  const [planFormError, setPlanFormError] = useState('');
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [editEntryForm, setEditEntryForm] = useState({ stage_id: '', interview_name: '', interview_type_id: '', notes: '' });
+  const [editEntryError, setEditEntryError] = useState('');
 
   const load = useCallback(async () => {
     setReqs(await api.getReqs());
@@ -27,10 +43,12 @@ export default function Reqs() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load user lists for dropdowns
+  // Load user lists + stages + interview types for dropdowns
   useEffect(() => {
     api.getUsers().then(setUsers).catch(() => {});
     api.getHmUsers().then(setHmUsers).catch(() => {});
+    api.getStages().then(data => setStages(Array.isArray(data) ? data.filter(s => !s.is_terminal) : [])).catch(() => {});
+    api.getInterviewTypes().then(data => setInterviewTypes(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
   const set    = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
@@ -64,6 +82,69 @@ export default function Reqs() {
     setEditId(null);
     load();
   };
+
+  // ── Interview plan handlers ──────────────────────────────────
+  const loadPlan = useCallback(async (reqId) => {
+    setPlanLoading(true);
+    const data = await api.getReqInterviewPlan(reqId).catch(() => []);
+    setPlanEntries(prev => ({ ...prev, [reqId]: Array.isArray(data) ? data : [] }));
+    setPlanLoading(false);
+  }, []);
+
+  const togglePlan = useCallback((reqId) => {
+    if (expandedPlanId === reqId) {
+      setExpandedPlanId(null);
+    } else {
+      setExpandedPlanId(reqId);
+      if (!planEntries[reqId]) loadPlan(reqId);
+      setPlanForm({ stage_id: '', interview_name: '', interview_type_id: '', notes: '' });
+      setPlanFormError('');
+      setEditingEntryId(null);
+    }
+  }, [expandedPlanId, planEntries, loadPlan]);
+
+  const handleAddPlanEntry = useCallback(async (reqId, e) => {
+    e.preventDefault();
+    setPlanFormError('');
+    if (!planForm.stage_id)         { setPlanFormError('Stage is required'); return; }
+    if (!planForm.interview_name.trim()) { setPlanFormError('Interview name is required'); return; }
+    const res = await api.addInterviewPlanEntry(reqId, {
+      stage_id:          planForm.stage_id,
+      interview_name:    planForm.interview_name.trim(),
+      interview_type_id: planForm.interview_type_id || null,
+      notes:             planForm.notes || null,
+    });
+    if (res.error) { setPlanFormError(res.error); return; }
+    setPlanForm({ stage_id: '', interview_name: '', interview_type_id: '', notes: '' });
+    loadPlan(reqId);
+  }, [planForm, loadPlan]);
+
+  const startEditEntry = useCallback((entry) => {
+    setEditingEntryId(entry.id);
+    setEditEntryForm({ stage_id: String(entry.stage_id), interview_name: entry.interview_name, interview_type_id: entry.interview_type_id ? String(entry.interview_type_id) : '', notes: entry.notes || '' });
+    setEditEntryError('');
+  }, []);
+
+  const handleUpdateEntry = useCallback(async (reqId, entryId, e) => {
+    e.preventDefault();
+    setEditEntryError('');
+    if (!editEntryForm.interview_name.trim()) { setEditEntryError('Interview name is required'); return; }
+    const res = await api.updateInterviewPlanEntry(reqId, entryId, {
+      stage_id:          editEntryForm.stage_id,
+      interview_name:    editEntryForm.interview_name.trim(),
+      interview_type_id: editEntryForm.interview_type_id || null,
+      notes:             editEntryForm.notes || null,
+    });
+    if (res.error) { setEditEntryError(res.error); return; }
+    setEditingEntryId(null);
+    loadPlan(reqId);
+  }, [editEntryForm, loadPlan]);
+
+  const handleDeleteEntry = useCallback(async (reqId, entryId) => {
+    if (!window.confirm('Delete this plan entry?')) return;
+    await api.deleteInterviewPlanEntry(reqId, entryId);
+    loadPlan(reqId);
+  }, [loadPlan]);
 
   if (loading) {
     return (
@@ -109,7 +190,8 @@ export default function Reqs() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {reqs.map(r => (
-                <tr key={r.id} className="hover:bg-slate-50">
+                <React.Fragment key={r.id}>
+                <tr className="hover:bg-slate-50">
                     {editId === r.id ? (
                       /* ── edit row ── */
                       <td colSpan={6} className="px-4 py-3">
@@ -222,22 +304,185 @@ export default function Reqs() {
                         <td className="px-3 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 justify-end">
                             <button
-                              onClick={() => startEdit(r)}
-                              className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                              onClick={() => togglePlan(r.id)}
+                              className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                                expandedPlanId === r.id
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                              }`}
                             >
-                              Edit
+                              📋 Plan {expandedPlanId === r.id ? '▲' : '▼'}
                             </button>
-                            <button
-                              onClick={() => handleDelete(r)}
-                              className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
-                            >
-                              Delete
-                            </button>
+                            {canEdit && (
+                              <>
+                                <button
+                                  onClick={() => startEdit(r)}
+                                  className="px-2.5 py-1 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(r)}
+                                  className="px-2.5 py-1 text-xs bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </>
                     )}
                   </tr>
+
+                  {/* ── Interview plan expanded row ── */}
+                  {expandedPlanId === r.id && (
+                    <tr className="bg-blue-50/40">
+                      <td colSpan={6} className="px-6 py-4">
+                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">Interview Plan</p>
+
+                        {/* Existing entries */}
+                        {planLoading ? (
+                          <p className="text-xs text-slate-400 italic">Loading…</p>
+                        ) : (planEntries[r.id] || []).length === 0 ? (
+                          <p className="text-xs text-slate-400 italic mb-3">No entries yet.</p>
+                        ) : (
+                          <div className="overflow-x-auto mb-4">
+                            <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                              <thead className="bg-slate-100">
+                                <tr>
+                                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Stage</th>
+                                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Interview Name</th>
+                                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Type</th>
+                                  <th className="text-left px-3 py-2 font-semibold text-slate-600">Notes</th>
+                                  {canEdit && <th className="px-3 py-2" />}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 bg-white">
+                                {(planEntries[r.id] || []).map(entry => (
+                                  editingEntryId === entry.id ? (
+                                    <tr key={entry.id} className="bg-blue-50">
+                                      <td className="px-3 py-2">
+                                        <select
+                                          value={editEntryForm.stage_id}
+                                          onChange={e => setEditEntryForm(f => ({ ...f, stage_id: e.target.value }))}
+                                          className="border border-slate-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        >
+                                          <option value="">— Stage —</option>
+                                          {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </select>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          value={editEntryForm.interview_name}
+                                          onChange={e => setEditEntryForm(f => ({ ...f, interview_name: e.target.value }))}
+                                          className="border border-slate-300 rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <select
+                                          value={editEntryForm.interview_type_id}
+                                          onChange={e => setEditEntryForm(f => ({ ...f, interview_type_id: e.target.value }))}
+                                          className="border border-slate-300 rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        >
+                                          <option value="">None</option>
+                                          {interviewTypes.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                                        </select>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        <input
+                                          value={editEntryForm.notes}
+                                          onChange={e => setEditEntryForm(f => ({ ...f, notes: e.target.value }))}
+                                          placeholder="optional"
+                                          className="border border-slate-300 rounded px-2 py-1 text-xs w-full focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {editEntryError && <span className="text-red-500 mr-2">{editEntryError}</span>}
+                                        <button onClick={(e) => handleUpdateEntry(r.id, entry.id, e)} className="text-blue-600 hover:text-blue-800 font-semibold mr-2">Save</button>
+                                        <button onClick={() => setEditingEntryId(null)} className="text-slate-400 hover:text-slate-600">Cancel</button>
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    <tr key={entry.id}>
+                                      <td className="px-3 py-2">
+                                        <span className="flex items-center gap-1.5">
+                                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.stage_color || '#94a3b8' }} />
+                                          {entry.stage_name}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2 font-medium text-slate-800">{entry.interview_name}</td>
+                                      <td className="px-3 py-2 text-slate-500">{entry.interview_type_name || <span className="text-slate-300">—</span>}</td>
+                                      <td className="px-3 py-2 text-slate-500 max-w-xs truncate">{entry.notes || <span className="text-slate-300">—</span>}</td>
+                                      {canEdit && (
+                                        <td className="px-3 py-2 whitespace-nowrap">
+                                          <button onClick={() => startEditEntry(entry)} className="text-slate-400 hover:text-blue-600 mr-2">Edit</button>
+                                          <button onClick={() => handleDeleteEntry(r.id, entry.id)} className="text-slate-400 hover:text-red-500">Delete</button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  )
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {/* Add new entry form */}
+                        {canEdit && (
+                          <form onSubmit={(e) => handleAddPlanEntry(r.id, e)} className="flex flex-wrap gap-2 items-end">
+                            <div>
+                              <label className="block text-xs text-slate-500 mb-1">Stage *</label>
+                              <select
+                                value={planForm.stage_id}
+                                onChange={e => setPlanForm(f => ({ ...f, stage_id: e.target.value }))}
+                                className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="">— Select stage —</option>
+                                {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-slate-500 mb-1">Interview Name *</label>
+                              <input
+                                value={planForm.interview_name}
+                                onChange={e => setPlanForm(f => ({ ...f, interview_name: e.target.value }))}
+                                placeholder="e.g. Pair Coding Session"
+                                className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-slate-500 mb-1">Type</label>
+                              <select
+                                value={planForm.interview_type_id}
+                                onChange={e => setPlanForm(f => ({ ...f, interview_type_id: e.target.value }))}
+                                className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="">None</option>
+                                {interviewTypes.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-slate-500 mb-1">Notes</label>
+                              <input
+                                value={planForm.notes}
+                                onChange={e => setPlanForm(f => ({ ...f, notes: e.target.value }))}
+                                placeholder="optional"
+                                className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              {planFormError && <p className="text-xs text-red-500 mb-1">{planFormError}</p>}
+                              <button type="submit" className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
+                                + Add Entry
+                              </button>
+                            </div>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -250,7 +495,7 @@ export default function Reqs() {
       )}
 
       {/* Add new req */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {canEdit && <div className="bg-white rounded-xl border border-slate-200 p-5">
         <h3 className="text-sm font-semibold text-slate-700 mb-3">Add New Requisition</h3>
         <form onSubmit={handleAdd} className="flex flex-wrap gap-3 items-end">
           <div>
@@ -336,7 +581,7 @@ export default function Reqs() {
             Add Req
           </button>
         </form>
-      </div>
+      </div>}
     </div>
   );
 }

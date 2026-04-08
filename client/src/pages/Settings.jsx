@@ -52,13 +52,15 @@ export default function Settings() {
   const [stages, setStages]       = useState([]);
   const [newName, setNewName]     = useState('');
   const [newColor, setNewColor]   = useState(COLORS[0]);
-  const [newTerm, setNewTerm]     = useState(false);
-  const [newHire, setNewHire]     = useState(false);
-  const [editId, setEditId]       = useState(null);
-  const [editName, setEditName]   = useState('');
-  const [editColor, setEditColor] = useState('');
-  const [editTerm, setEditTerm]   = useState(false);
-  const [editHire, setEditHire]   = useState(false);
+  const [newTerm, setNewTerm]         = useState(false);
+  const [newHire, setNewHire]         = useState(false);
+  const [newReqSched, setNewReqSched] = useState(false);
+  const [editId, setEditId]           = useState(null);
+  const [editName, setEditName]       = useState('');
+  const [editColor, setEditColor]     = useState('');
+  const [editTerm, setEditTerm]       = useState(false);
+  const [editHire, setEditHire]       = useState(false);
+  const [editReqSched, setEditReqSched] = useState(false);
   const [error, setError]         = useState('');
 
   // ── Users state ─────────────────────────────────────────────
@@ -127,11 +129,12 @@ export default function Settings() {
     e.preventDefault();
     if (!newName.trim()) return;
     setError('');
-    await api.createStage({ name: newName.trim(), color: newColor, is_terminal: newTerm || newHire, is_hire: newHire });
+    await api.createStage({ name: newName.trim(), color: newColor, is_terminal: newTerm || newHire, is_hire: newHire, requires_scheduling: newReqSched && !newHire && !newTerm });
     setNewName('');
     setNewColor(COLORS[0]);
     setNewTerm(false);
     setNewHire(false);
+    setNewReqSched(false);
     load();
   };
 
@@ -148,15 +151,17 @@ export default function Settings() {
     setEditColor(stage.color);
     setEditTerm(!!stage.is_terminal);
     setEditHire(!!stage.is_hire);
+    setEditReqSched(!!stage.requires_scheduling);
   };
 
   const saveEdit = async (stage) => {
     await api.updateStage(stage.id, {
-      name:        editName,
-      color:       editColor,
-      order_index: stage.order_index,
-      is_terminal: editTerm || editHire,  // hire stages are always terminal
-      is_hire:     editHire,
+      name:                editName,
+      color:               editColor,
+      order_index:         stage.order_index,
+      is_terminal:         editTerm || editHire,
+      is_hire:             editHire,
+      requires_scheduling: editReqSched && !editHire && !(editTerm || editHire),
     });
     setEditId(null);
     load();
@@ -381,8 +386,8 @@ export default function Settings() {
     const swap = stages[dir === 'up' ? idx - 1 : idx + 1];
     if (!swap) return;
     await Promise.all([
-      api.updateStage(stage.id, { name: stage.name, color: stage.color, order_index: swap.order_index,  is_terminal: stage.is_terminal, is_hire: stage.is_hire }),
-      api.updateStage(swap.id,  { name: swap.name,  color: swap.color,  order_index: stage.order_index, is_terminal: swap.is_terminal,  is_hire: swap.is_hire }),
+      api.updateStage(stage.id, { name: stage.name, color: stage.color, order_index: swap.order_index,  is_terminal: stage.is_terminal, is_hire: stage.is_hire, requires_scheduling: stage.requires_scheduling }),
+      api.updateStage(swap.id,  { name: swap.name,  color: swap.color,  order_index: stage.order_index, is_terminal: swap.is_terminal,  is_hire: swap.is_hire,  requires_scheduling: swap.requires_scheduling }),
     ]);
     load();
   };
@@ -439,6 +444,16 @@ export default function Settings() {
                       />
                       Hire
                     </label>
+                    <label className="flex items-center gap-1.5 text-xs text-amber-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editReqSched}
+                        onChange={e => setEditReqSched(e.target.checked)}
+                        className="rounded"
+                        disabled={editHire || editTerm}
+                      />
+                      Req. Scheduling
+                    </label>
                     <button onClick={() => saveEdit(stage)} className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Save</button>
                     <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200">Cancel</button>
                   </>
@@ -452,6 +467,9 @@ export default function Settings() {
                     ) : stage.is_terminal ? (
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">Terminal</span>
                     ) : null}
+                    {!!stage.requires_scheduling && !stage.is_terminal && (
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">📅 Req. Scheduling</span>
+                    )}
                     <div className="flex items-center gap-1 ml-2">
                       <button disabled={idx === 0}              onClick={() => move(stage, 'up')}   className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25 text-base leading-none">↑</button>
                       <button disabled={idx === stages.length - 1} onClick={() => move(stage, 'down')} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25 text-base leading-none">↓</button>
@@ -509,6 +527,16 @@ export default function Settings() {
                   className="rounded"
                 />
                 Hire stage
+              </label>
+              <label className="flex items-center gap-2 text-sm text-amber-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newReqSched}
+                  onChange={e => setNewReqSched(e.target.checked)}
+                  className="rounded"
+                  disabled={newHire || newTerm}
+                />
+                Req. Scheduling
               </label>
             </div>
             <button
