@@ -325,15 +325,36 @@ function ByHmTab() {
 
 // ── Tab: Daily Snapshot ──────────────────────────────────────────
 
+const DIVIDER = '────────────────────────────────────';
+
+function stageEmoji(name = '') {
+  const n = name.toLowerCase();
+  if (/appli|new|sourc|inbound/.test(n))            return '📥';
+  if (/phone|screen|recruiter/.test(n))              return '📞';
+  if (/hm|hiring.?manager|review/.test(n))           return '👔';
+  if (/interview|technical|onsite|panel/.test(n))    return '🗣️';
+  if (/assess|take.?home|coding|test/.test(n))       return '💻';
+  if (/offer/.test(n))                               return '🎯';
+  if (/background|bg.?check|reference|ref/.test(n))  return '🔍';
+  if (/hired|accepted|started/.test(n))              return '🎉';
+  return '🔵';
+}
+
+function miniBar(count, max, width = 10) {
+  const filled = max > 0 ? Math.round((count / max) * width) : 0;
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
 function generateSlackSnapshot(byReqData, overallStats) {
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
-  const openReqs   = byReqData.filter(r => r.status === 'open');
+  const openReqs    = byReqData.filter(r => r.status === 'open');
   const totalActive = openReqs.reduce((n, r) => n + r.activeCandidates, 0);
 
   const lines = [];
   lines.push(`*📊 Daily TA Update — ${today}*`);
+  lines.push(DIVIDER);
   lines.push('');
 
   if (openReqs.length === 0) {
@@ -344,27 +365,52 @@ function generateSlackSnapshot(byReqData, overallStats) {
       `${totalActive} active ${totalActive === 1 ? 'candidate' : 'candidates'}`
     );
     lines.push('');
-    lines.push('*Role Breakdown:*');
+    lines.push('*📂 Role Breakdown*');
+    lines.push('');
 
     openReqs.forEach(req => {
       const activeStages = req.stages.filter(s => !s.is_terminal && s.count > 0);
-      const stageStr = activeStages.map(s => `${s.stage_name}: ${s.count}`).join(' · ');
       const meta = [
         req.department,
         req.hiring_manager ? `HM: ${req.hiring_manager}` : null,
       ].filter(Boolean).join(' | ');
 
-      lines.push(`• *${req.title}*${meta ? ` _(${meta})_` : ''} — ${req.activeCandidates} active`);
-      if (stageStr) lines.push(`  ${stageStr}`);
+      lines.push(`*${req.title}*${meta ? ` _(${meta})_` : ''}`);
+      if (activeStages.length > 0) {
+        const stageStr = activeStages
+          .map(s => `${stageEmoji(s.stage_name)} ${s.stage_name}: ${s.count}`)
+          .join('  ·  ');
+        lines.push(`  ${stageStr}  · *${req.activeCandidates} active*`);
+      } else {
+        lines.push('  _No active candidates_');
+      }
+      lines.push('');
     });
   }
 
+  // Mini bar chart from overall funnel
+  const activeFunnel = (overallStats.funnel || []).filter(s => !s.is_terminal && s.count > 0);
+  if (activeFunnel.length > 0) {
+    lines.push(DIVIDER);
+    lines.push('');
+    lines.push('*📈 Pipeline Funnel*');
+    const maxCount = Math.max(...activeFunnel.map(s => s.count));
+    activeFunnel.forEach(stage => {
+      const emoji = stageEmoji(stage.name);
+      const bar   = miniBar(stage.count, maxCount);
+      const label = stage.name.padEnd(18, ' ');
+      lines.push(`  ${emoji} \`${label}\` ${bar}  ${stage.count}`);
+    });
+    lines.push('');
+  }
+
+  lines.push(DIVIDER);
   lines.push('');
   lines.push('*Key Metrics*');
-  if (overallStats.avgTtf != null)       lines.push(`• Avg Time to Fill: ${overallStats.avgTtf} days`);
-  if (overallStats.totalHired)           lines.push(`• Total Hired (all time): ${overallStats.totalHired}`);
-  if (overallStats.hmForwardRate != null) lines.push(`• HM Forward Rate: ${overallStats.hmForwardRate}% (${overallStats.hmTotal} reviews)`);
-  lines.push(`• Open Reqs: ${overallStats.openReqs}`);
+  if (overallStats.avgTtf != null)        lines.push(`  ⏱️ Avg Time to Fill: *${overallStats.avgTtf} days*`);
+  if (overallStats.totalHired)            lines.push(`  🎉 Total Hired (all time): *${overallStats.totalHired}*`);
+  if (overallStats.hmForwardRate != null) lines.push(`  ✅ HM Forward Rate: *${overallStats.hmForwardRate}%* (${overallStats.hmTotal} reviews)`);
+  lines.push(`  📋 Open Reqs: *${overallStats.openReqs}*`);
   lines.push('');
   lines.push('_Generated via GhostBuster_');
 
@@ -372,9 +418,9 @@ function generateSlackSnapshot(byReqData, overallStats) {
 }
 
 function DailySnapshotTab({ overallStats }) {
-  const [loading, setLoading]   = useState(true);
-  const [text, setText]         = useState('');
-  const [copied, setCopied]     = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [text, setText]       = useState('');
+  const [copied, setCopied]   = useState(false);
 
   const loadAndGenerate = useCallback(async () => {
     setLoading(true);
