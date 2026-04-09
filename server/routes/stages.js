@@ -1,11 +1,12 @@
 const express     = require('express');
 const router      = express.Router();
 const db          = require('../db');
-const requireAuth = require('../middleware/requireAuth');
-const requireRole = require('../middleware/requireRole');
+const requireAuth   = require('../middleware/requireAuth');
+const requireHmAuth = require('../middleware/requireHmAuth');
+const requireRole   = require('../middleware/requireRole');
 
-// GET /api/stages  — any authenticated user
-router.get('/', requireAuth, (req, res) => {
+// GET /api/stages  — any authenticated user (recruiters or HMs)
+router.get('/', requireHmAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM stages ORDER BY order_index').all());
 });
 
