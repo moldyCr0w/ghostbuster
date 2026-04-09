@@ -93,7 +93,9 @@ export const api = {
   hmLogout:  ()            => req('/auth/hm-logout',  { method: 'POST' }),
 
   // ── Stats ─────────────────────────────────────────────────────
-  getStats: () => req('/stats'),
+  getStats:      () => req('/stats'),
+  getStatsByReq: () => req('/stats/by-req'),
+  getStatsByHm:  () => req('/stats/by-hm'),
 
   // ── HM users (admin) ──────────────────────────────────────────
   getHmUsers:   ()        => req('/hm-users'),
