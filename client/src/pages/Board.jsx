@@ -5,11 +5,31 @@ import { localToday } from '../utils/dates';
 import CandidateModal from '../components/CandidateModal';
 
 /* ── Candidate card ──────────────────────────────────────────────── */
-function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmScheduled }) {
+function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCardStatusChange, onConfirmScheduled }) {
   const isOverdue      = candidate.next_step_due && candidate.next_step_due < today;
   const isHmReview     = !!candidate.is_hm_review;
   const isPending      = !!candidate.pending_next_stage_id;
-  const isSchedPending = !!candidate.schedule_pending;
+  // schedule_pending is a fallback amber state for non-eligible stages with requires_scheduling
+  const isSchedPending = !isEligible && !!candidate.schedule_pending;
+  const subStatus      = isEligible && !isPending ? candidate.card_sub_status : null;
+  const isTaAction     = subStatus === 'ta_action';
+  const isChecking     = subStatus === 'check_scheduled';
+  const isScheduled    = isEligible && !isPending && !subStatus;
+
+  const [localDate, setLocalDate] = React.useState(candidate.stage_event_date || '');
+  React.useEffect(() => {
+    setLocalDate(candidate.stage_event_date || '');
+  }, [candidate.stage_event_date]);
+
+  const handleStatusClick = (e, newStatus, eventDate = undefined) => {
+    e.stopPropagation();
+    onCardStatusChange(candidate.id, newStatus, eventDate !== undefined ? eventDate : candidate.stage_event_date);
+  };
+
+  const handleDateBlur = (e) => {
+    e.stopPropagation();
+    onCardStatusChange(candidate.id, null, localDate || null);
+  };
 
   return (
     <div
@@ -17,10 +37,12 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmSchedul
       onDragStart={(isPending || isSchedPending) ? undefined : (e => onDragStart(e, candidate.id))}
       onClick={() => onEdit(candidate)}
       className={`rounded-lg border p-3 cursor-pointer hover:shadow-md active:opacity-70 transition-shadow select-none ${
-        isSchedPending ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300' :
-        isPending      ? 'border-teal-400 bg-teal-50 ring-1 ring-teal-300' :
-        isOverdue      ? 'border-red-300 bg-red-50' :
-        isHmReview     ? 'border-orange-300 bg-orange-50' :
+        isPending      ? 'bg-teal-50 border-teal-400 ring-1 ring-teal-300' :
+        isTaAction     ? 'bg-green-50 border-green-400' :
+        isChecking     ? 'bg-yellow-50 border-yellow-400' :
+        isSchedPending ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-300' :
+        isOverdue      ? 'bg-red-50 border-red-300' :
+        isHmReview     ? 'bg-orange-50 border-orange-300' :
         'bg-white border-slate-200'
       }`}
     >
@@ -29,6 +51,22 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmSchedul
         <div className="flex items-center gap-1 mb-2 px-1.5 py-0.5 bg-teal-100 rounded text-teal-700 text-xs font-semibold">
           <span>⏳</span>
           <span>Pending TA Action</span>
+        </div>
+      )}
+
+      {/* TA Action banner */}
+      {isTaAction && (
+        <div className="flex items-center gap-1 mb-2 px-1.5 py-0.5 bg-green-100 rounded text-green-700 text-xs font-semibold">
+          <span>📋</span>
+          <span>TA Action Needed</span>
+        </div>
+      )}
+
+      {/* Checking scheduled banner */}
+      {isChecking && (
+        <div className="flex items-center gap-1 mb-2 px-1.5 py-0.5 bg-yellow-100 rounded text-yellow-700 text-xs font-semibold">
+          <span>⏰</span>
+          <span>Awaiting Confirmation</span>
         </div>
       )}
 
@@ -63,14 +101,14 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmSchedul
       {isPending && candidate.pending_reason && (
         <p className="text-xs text-teal-600 mt-1.5 italic">{candidate.pending_reason}</p>
       )}
-      {!isPending && !isSchedPending && isOverdue && (
+      {!isPending && !isTaAction && !isChecking && !isSchedPending && isOverdue && (
         <p className="text-xs text-red-600 font-semibold mt-1.5">🚨 SLA overdue</p>
       )}
       {!isPending && !isSchedPending && isHmReview && !isOverdue && (
         <p className="text-xs text-orange-600 font-medium mt-1.5">🔍 Awaiting HM</p>
       )}
 
-      {/* Confirm Scheduled button */}
+      {/* Confirm Scheduled button — fallback for requires_scheduling stages */}
       {isSchedPending && onConfirmScheduled && (
         <button
           onClick={e => { e.stopPropagation(); onConfirmScheduled(candidate.id); }}
@@ -78,6 +116,45 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmSchedul
         >
           ✓ Confirm Scheduled
         </button>
+      )}
+
+      {/* Date field — shown when card is in "scheduled" (white) state */}
+      {isScheduled && (
+        <div className="mt-2" onClick={e => e.stopPropagation()}>
+          <input
+            type="date"
+            value={localDate}
+            onChange={e => setLocalDate(e.target.value)}
+            onBlur={handleDateBlur}
+            className="w-full text-xs border border-slate-200 rounded px-2 py-1 text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
+      )}
+
+      {/* Sub-status transition buttons */}
+      {isTaAction && (
+        <button
+          onClick={e => handleStatusClick(e, 'check_scheduled', null)}
+          className="mt-2 w-full text-left text-xs text-green-700 bg-green-100 hover:bg-green-200 rounded px-2 py-1 transition-colors"
+        >
+          → Following Up
+        </button>
+      )}
+      {isChecking && (
+        <div className="mt-2 flex gap-1" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={e => handleStatusClick(e, 'ta_action', null)}
+            className="flex-1 text-xs text-yellow-700 bg-yellow-100 hover:bg-yellow-200 rounded px-1.5 py-1 transition-colors"
+          >
+            ← Back
+          </button>
+          <button
+            onClick={e => handleStatusClick(e, null, null)}
+            className="flex-[2] text-xs text-green-700 bg-green-100 hover:bg-green-200 rounded px-1.5 py-1 transition-colors"
+          >
+            ✓ Scheduled
+          </button>
+        </div>
       )}
 
       {/* Resume indicator */}
@@ -89,7 +166,7 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, onConfirmSchedul
 }
 
 /* ── Kanban column ───────────────────────────────────────────────── */
-function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, onConfirmScheduled }) {
+function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, isEligible, onCardStatusChange, onConfirmScheduled }) {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = e => {
@@ -165,6 +242,8 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, o
                 today={today}
                 onEdit={onEdit}
                 onDragStart={onDragStart}
+                isEligible={isEligible}
+                onCardStatusChange={onCardStatusChange}
               />
             ))}
             {activeCandidates.length > 0 && (
@@ -185,6 +264,8 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, o
             today={today}
             onEdit={onEdit}
             onDragStart={onDragStart}
+            isEligible={isEligible}
+            onCardStatusChange={onCardStatusChange}
             onConfirmScheduled={onConfirmScheduled}
           />
         ))}
@@ -241,6 +322,25 @@ export default function Board() {
     });
   }, [location.state?.openCandidateId, navigate]);
 
+  /* ── Confirm scheduled (requires_scheduling stages fallback) ── */
+  const handleConfirmScheduled = useCallback(async (id) => {
+    await api.confirmScheduled(id);
+    const fresh = await api.getCandidates();
+    setCandidates(fresh);
+  }, []);
+
+  /* ── Card sub-status handler ── */
+  const handleCardStatusChange = useCallback(async (candidateId, newStatus, eventDate) => {
+    setCandidates(prev =>
+      prev.map(x =>
+        x.id === candidateId
+          ? { ...x, card_sub_status: newStatus, stage_event_date: eventDate }
+          : x
+      )
+    );
+    await api.updateCardStatus(candidateId, { sub_status: newStatus, stage_event_date: eventDate });
+  }, []);
+
   /* ── Drag handlers ── */
   const handleDragStart = useCallback((e, candidateId) => {
     e.dataTransfer.setData('candidateId', String(candidateId));
@@ -252,20 +352,23 @@ export default function Board() {
     if (!c || c.stage_id === newStageId) return;
 
     // Optimistic update — move card visually immediately
-    const newStageData = stages.find(s => s.id === newStageId);
+    const newStageData  = stages.find(s => s.id === newStageId);
+    const dragIsEligible = eligibleStageIds.has(newStageId);
     setMovingId(candidateId);
     setCandidates(prev =>
       prev.map(x =>
         x.id === candidateId
           ? {
               ...x,
-              stage_id:    newStageId,
-              stage_name:  newStageData?.name  ?? x.stage_name,
-              stage_color: newStageData?.color ?? x.stage_color,
-              order_index: newStageData?.order_index ?? x.order_index,
-              is_hm_review:   newStageData?.is_hm_review ?? 0,
-              is_terminal:    newStageData?.is_terminal  ?? 0,
-              schedule_pending: newStageData?.requires_scheduling ? 1 : 0,
+              stage_id:         newStageId,
+              stage_name:       newStageData?.name        ?? x.stage_name,
+              stage_color:      newStageData?.color       ?? x.stage_color,
+              order_index:      newStageData?.order_index ?? x.order_index,
+              is_hm_review:     newStageData?.is_hm_review ?? 0,
+              is_terminal:      newStageData?.is_terminal  ?? 0,
+              card_sub_status:  dragIsEligible ? 'ta_action' : null,
+              stage_event_date: null,
+              schedule_pending: (!dragIsEligible && newStageData?.requires_scheduling) ? 1 : 0,
             }
           : x
       )
@@ -289,13 +392,6 @@ export default function Board() {
     setCandidates(fresh);
   }, [candidates, stages]);
 
-  /* ── Confirm scheduled ── */
-  const handleConfirmScheduled = useCallback(async (id) => {
-    await api.confirmScheduled(id);
-    const fresh = await api.getCandidates();
-    setCandidates(fresh);
-  }, []);
-
   /* ── Modal save ── */
   const handleSave = useCallback(async (data) => {
     const { _resumeFile, _removeResume, _skipSave, ...fields } = data;
@@ -317,6 +413,15 @@ export default function Board() {
   }
 
   const today = localToday();
+
+  // Stages eligible for 3-state sub-status: after HM Review, non-terminal, non-hire
+  const hmStage = stages.find(s => s.is_hm_review);
+  const eligibleStageIds = new Set(
+    stages
+      .filter(s => !s.is_hm_review && !s.is_terminal && !s.is_hire &&
+                   hmStage && s.order_index > hmStage.order_index)
+      .map(s => s.id)
+  );
 
   // All stages except the "Hired" stage as columns, in order
   // This shows active stages + "Rejected / Closed" (declined) but hides "Hired"
@@ -428,6 +533,8 @@ export default function Board() {
               onEdit={setEditingCandidate}
               onDragStart={handleDragStart}
               onDrop={handleDrop}
+              isEligible={eligibleStageIds.has(stage.id)}
+              onCardStatusChange={handleCardStatusChange}
               onConfirmScheduled={handleConfirmScheduled}
             />
           ))}

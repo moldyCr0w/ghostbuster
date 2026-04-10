@@ -28,13 +28,19 @@ router.get('/', requireAuth, (_req, res) => {
 
   // ── Stage funnel (non-terminal stages, active candidates) ─────
   const funnel = db.prepare(`
-    SELECT s.name, s.order_index, s.color, s.is_terminal,
+    SELECT s.name, s.order_index, s.color, s.is_terminal, s.is_withdraw,
            COUNT(c.id) AS count
     FROM   stages s
     LEFT JOIN candidates c ON c.stage_id = s.id
     GROUP BY s.id
     ORDER BY s.order_index
   `).all();
+
+  // ── Candidate withdrew count (separate from company rejections) ─
+  const withdrawnCount = db.prepare(`
+    SELECT COUNT(*) AS n FROM candidates c
+    JOIN stages s ON c.stage_id = s.id WHERE s.is_withdraw = 1
+  `).get().n;
 
   // ── HM decisions summary ──────────────────────────────────────
   const hmDecisions = db.prepare(`
@@ -66,6 +72,7 @@ router.get('/', requireAuth, (_req, res) => {
     totalHired,
     openReqs,
     funnel,
+    withdrawnCount,
     hmForward,
     hmDecline,
     hmTotal,
