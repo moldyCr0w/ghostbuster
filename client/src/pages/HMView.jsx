@@ -783,10 +783,12 @@ export default function HMView() {
   const kanbanActive = kanbanCandidates.filter(c => !c.is_terminal);
 
   // Build stage -> candidate list
+  // Candidates with a pending transition show up in their destination stage, not HM Review
   const byStage = {};
   for (const s of activeStages) byStage[s.id] = [];
   for (const c of kanbanActive) {
-    if (byStage[c.stage_id]) byStage[c.stage_id].push(c);
+    const displayStageId = c.pending_next_stage_id || c.stage_id;
+    if (byStage[displayStageId]) byStage[displayStageId].push(c);
   }
 
   // Find the first req for each awaiting candidate (for display in action cards)
