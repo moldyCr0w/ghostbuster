@@ -1,31 +1,32 @@
 const express     = require('express');
 const router      = express.Router();
 const db          = require('../db');
-const requireAuth = require('../middleware/requireAuth');
-const requireRole = require('../middleware/requireRole');
+const requireAuth   = require('../middleware/requireAuth');
+const requireHmAuth = require('../middleware/requireHmAuth');
+const requireRole   = require('../middleware/requireRole');
 
-// GET /api/stages  — any authenticated user
-router.get('/', requireAuth, (req, res) => {
+// GET /api/stages  — any authenticated user (recruiters or HMs)
+router.get('/', requireHmAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM stages ORDER BY order_index').all());
 });
 
 // POST /api/stages  — admin only
 router.post('/', requireAuth, requireRole('admin'), (req, res) => {
-  const { name, color, is_terminal, is_hire } = req.body;
+  const { name, color, is_terminal, is_hire, requires_scheduling } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
   const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM stages').get().m || 0;
   const r = db.prepare(
-    'INSERT INTO stages (name, order_index, color, is_terminal, is_hire) VALUES (?, ?, ?, ?, ?)'
-  ).run(name, maxOrder + 1, color || '#6B7280', is_terminal ? 1 : 0, is_hire ? 1 : 0);
+    'INSERT INTO stages (name, order_index, color, is_terminal, is_hire, requires_scheduling) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(name, maxOrder + 1, color || '#6B7280', is_terminal ? 1 : 0, is_hire ? 1 : 0, requires_scheduling ? 1 : 0);
   res.status(201).json({ id: r.lastInsertRowid });
 });
 
 // PUT /api/stages/:id  — admin only
 router.put('/:id', requireAuth, requireRole('admin'), (req, res) => {
-  const { name, color, order_index, is_terminal, is_hire } = req.body;
+  const { name, color, order_index, is_terminal, is_hire, requires_scheduling } = req.body;
   db.prepare(
-    'UPDATE stages SET name=?, color=?, order_index=?, is_terminal=?, is_hire=? WHERE id=?'
-  ).run(name, color || '#6B7280', order_index, is_terminal ? 1 : 0, is_hire ? 1 : 0, req.params.id);
+    'UPDATE stages SET name=?, color=?, order_index=?, is_terminal=?, is_hire=?, requires_scheduling=? WHERE id=?'
+  ).run(name, color || '#6B7280', order_index, is_terminal ? 1 : 0, is_hire ? 1 : 0, requires_scheduling ? 1 : 0, req.params.id);
   res.json({ success: true });
 });
 
