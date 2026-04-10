@@ -130,4 +130,15 @@ export const api = {
   getScheduleLinks:   (candId)      => req(`/schedule/candidate/${candId}`),
   getScheduleInfo:    (tk)          => fetch(`/api/schedule/${tk}`).then(r => r.json()),
   bookScheduleSlot:   (tk, data)    => fetch(`/api/schedule/${tk}/book`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+
+  // ── Workday integration ────────────────────────────────────────
+  workdayStatus:     ()                    => req('/workday/status'),
+  workdayPush:       (candidateId, data)   => req(`/workday/push/${candidateId}`,  { method: 'POST', body: JSON.stringify(data) }),
+  workdayRetry:      (candidateId, data)   => req(`/workday/retry/${candidateId}`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // WD HC slots (per req)
+  getWdSlots:        (reqId)               => req(`/reqs/${reqId}/wd-slots`),
+  addWdSlot:         (reqId, data)         => req(`/reqs/${reqId}/wd-slots`,           { method: 'POST',  body: JSON.stringify(data) }),
+  updateWdSlot:      (reqId, slotId, data) => req(`/reqs/${reqId}/wd-slots/${slotId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteWdSlot:      (reqId, slotId)       => req(`/reqs/${reqId}/wd-slots/${slotId}`, { method: 'DELETE' }),
 };

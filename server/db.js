@@ -239,6 +239,33 @@ try {
   `);
 } catch (_) {}
 
+// Workday headcount slots per req
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS req_wd_slots (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      req_id       INTEGER NOT NULL REFERENCES reqs(id) ON DELETE CASCADE,
+      wd_req_id    TEXT    NOT NULL,
+      label        TEXT,
+      status       TEXT    NOT NULL DEFAULT 'open',
+      candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
+      pushed_at    TEXT,
+      created_at   TEXT    DEFAULT (datetime('now'))
+    );
+  `);
+} catch (_) {}
+
+// Workday sync state on candidates
+[
+  'wd_applicant_id  TEXT',
+  'wd_sync_status   TEXT',
+  'wd_synced_at     TEXT',
+  'wd_sync_error    TEXT',
+  'wd_pushed_req_id TEXT',
+].forEach(col => {
+  try { db.exec(`ALTER TABLE candidates ADD COLUMN ${col}`); } catch (_) {}
+});
+
 // Panelist qualification tags (recruiter-defined tag library)
 try {
   db.exec(`
