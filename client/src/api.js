@@ -144,6 +144,7 @@ export const api = {
   deletePokedexEntry:    (id)     => req(`/pokedex/entries/${id}`,    { method: 'DELETE' }),
 
   // ── Scheduling ─────────────────────────────────────────────────
+  checkSchedulingAvailability: (data) => req('/scheduling-tool/check-availability', { method: 'POST', body: JSON.stringify(data) }),
   createScheduleLink: (data)        => req('/schedule',                   { method: 'POST', body: JSON.stringify(data) }),
   getScheduleLinks:   (candId)      => req(`/schedule/candidate/${candId}`),
   getScheduleInfo:    (tk)          => fetch(`/api/schedule/${tk}`).then(r => r.json()),

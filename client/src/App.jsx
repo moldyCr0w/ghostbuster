@@ -13,8 +13,9 @@ import Pokedex    from './pages/Pokedex';
 import Login      from './pages/Login';
 import HMView     from './pages/HMView';
 import HMLogin    from './pages/HMLogin';
-import Schedule    from './pages/Schedule';
-import JobPosting  from './pages/JobPosting';
+import Schedule        from './pages/Schedule';
+import JobPosting      from './pages/JobPosting';
+import SchedulingTool  from './pages/SchedulingTool';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -168,6 +169,7 @@ function AppShell() {
           <NavLink to="/reqs"           className={navItem}>📋 Requisitions</NavLink>
           <NavLink to="/stats"          className={navItem}>📈 Stats</NavLink>
           <NavLink to="/pokedex"        className={navItem}>🔴 Pokédex</NavLink>
+          <NavLink to="/scheduling"     className={navItem}>📅 Scheduling</NavLink>
           <NavLink to="/settings"       className={navItem}>⚙️ Settings</NavLink>
           <div className="pt-1">
             <NotificationBell />
@@ -197,9 +199,10 @@ function AppShell() {
           <Route path="/board"      element={<Board />}      />
           <Route path="/candidates" element={<Candidates />} />
           <Route path="/reqs"       element={<Reqs />}       />
-          <Route path="/stats"      element={<Stats />}      />
-          <Route path="/pokedex"    element={<Pokedex />}    />
-          <Route path="/settings"   element={<Settings />}   />
+          <Route path="/stats"       element={<Stats />}          />
+          <Route path="/pokedex"     element={<Pokedex />}        />
+          <Route path="/scheduling"  element={<SchedulingTool />} />
+          <Route path="/settings"    element={<Settings />}       />
           <Route path="*"           element={<Navigate to="/" replace />} />
         </Routes>
       </main>
