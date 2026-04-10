@@ -99,4 +99,59 @@ router.delete('/:id/scorecard/:criterionId', requireAuth, requireRole('senior_re
   res.json({ success: true });
 });
 
+/* ─── Workday HC slots ──────────────────────────────────────────────────── */
+
+// GET /api/reqs/:id/wd-slots
+router.get('/:id/wd-slots', (req, res) => {
+  const slots = db.prepare(`
+    SELECT ws.*, c.first_name, c.last_name, c.name as candidate_name
+    FROM   req_wd_slots ws
+    LEFT JOIN candidates c ON c.id = ws.candidate_id
+    WHERE  ws.req_id = ?
+    ORDER BY ws.created_at ASC
+  `).all(req.params.id);
+  res.json(slots);
+});
+
+// POST /api/reqs/:id/wd-slots  — add a new HC slot (senior_recruiter+)
+router.post('/:id/wd-slots', requireRole('senior_recruiter'), (req, res) => {
+  const { wd_req_id, label } = req.body || {};
+  if (!wd_req_id?.trim()) return res.status(400).json({ error: 'wd_req_id is required' });
+
+  const r = db.prepare(`
+    INSERT INTO req_wd_slots (req_id, wd_req_id, label)
+    VALUES (?, ?, ?)
+  `).run(req.params.id, wd_req_id.trim(), label?.trim() || null);
+
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+
+// PATCH /api/reqs/:id/wd-slots/:slotId  — update label or status (senior_recruiter+)
+router.patch('/:id/wd-slots/:slotId', requireRole('senior_recruiter'), (req, res) => {
+  const { label, status } = req.body || {};
+  const allowed = ['open', 'pushed', 'filled'];
+  if (status && !allowed.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+  }
+  db.prepare(`
+    UPDATE req_wd_slots
+    SET label = COALESCE(?, label),
+        status = COALESCE(?, status)
+    WHERE id = ? AND req_id = ?
+  `).run(label?.trim() ?? null, status ?? null, req.params.slotId, req.params.id);
+  res.json({ success: true });
+});
+
+// DELETE /api/reqs/:id/wd-slots/:slotId  — remove a slot (senior_recruiter+, only if open)
+router.delete('/:id/wd-slots/:slotId', requireRole('senior_recruiter'), (req, res) => {
+  const slot = db.prepare('SELECT id, status FROM req_wd_slots WHERE id = ? AND req_id = ?')
+    .get(req.params.slotId, req.params.id);
+  if (!slot) return res.status(404).json({ error: 'Slot not found' });
+  if (slot.status !== 'open') {
+    return res.status(400).json({ error: 'Cannot delete a slot that has already been pushed or filled' });
+  }
+  db.prepare('DELETE FROM req_wd_slots WHERE id = ?').run(req.params.slotId);
+  res.json({ success: true });
+});
+
 module.exports = router;

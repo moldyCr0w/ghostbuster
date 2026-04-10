@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
+import WorkdayPushModal from './WorkdayPushModal';
 
 function todayStr() {
   const d = new Date();
@@ -41,6 +42,8 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const [submittingHm, setSubmittingHm] = useState(false);
   const [advanceReason, setAdvanceReason] = useState('');
   const [advancing, setAdvancing]       = useState(false);
+  const [showWdModal, setShowWdModal]   = useState(false);
+  const [wdPushed, setWdPushed]         = useState(false);
 
   // ── Video screen notes state ──
   const [videoNotes, setVideoNotes]         = useState([]);
@@ -167,6 +170,11 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const hmReviewStage   = stages.find(s => s.is_hm_review);
   const alreadyHmReview = !!selectedStage?.is_hm_review;
   const canSubmitHm     = !!candidate && !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
+
+  // Workday push — visible when the candidate is in the Offer stage
+  const isOfferStage = !!candidate && selectedStage?.name?.toLowerCase() === 'offer';
+  const alreadyPushedToWd = !!(candidate?.wd_sync_status === 'synced' || wdPushed);
+  const wdFailed = candidate?.wd_sync_status === 'failed';
 
   // Reqs the candidate is linked to (for the "Filling Req" dropdown)
   const linkedReqs = reqs.filter(r => selectedIds.includes(r.id));
@@ -1218,8 +1226,53 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
               {submittingHm ? 'Submitting…' : '🔍 Submit for HM Review'}
             </button>
           )}
+
+          {isOfferStage && (
+            alreadyPushedToWd ? (
+              <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-600 text-sm">✓</span>
+                  <span className="text-sm font-medium text-emerald-700">Pushed to Workday</span>
+                  {candidate?.wd_pushed_req_id && (
+                    <span className="font-mono text-xs text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      {candidate.wd_pushed_req_id}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWdModal(true)}
+                  className="text-xs text-emerald-600 hover:underline"
+                >
+                  Push again
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowWdModal(true)}
+                disabled={saving}
+                className="w-full py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {wdFailed ? '⚠ Retry Push to Workday' : 'Push to Workday'}
+              </button>
+            )
+          )}
         </div>
       </div>
+
+      {showWdModal && (
+        <WorkdayPushModal
+          candidate={{ ...candidate, reqs: reqs.filter(r => selectedIds.includes(r.id)) }}
+          onClose={() => setShowWdModal(false)}
+          onSuccess={(wdId) => {
+            setShowWdModal(false);
+            setWdPushed(true);
+            // Persist the WD applicant ID into candidate for this session
+            if (candidate) candidate.wd_applicant_id = wdId;
+          }}
+        />
+      )}
     </div>
   );
 }
