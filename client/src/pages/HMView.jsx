@@ -734,10 +734,12 @@ export default function HMView() {
   }
 
   // All candidates awaiting HM decision (across visible reqs)
+  // Exclude candidates with a pending transition — HM has already acted, TA just hasn't confirmed yet
   const visibleReqIds = new Set(visibleReqs.map(r => r.id));
   const awaitingDecision = hmReviewStage
     ? candidates.filter(c =>
         c.stage_id === hmReviewStage.id &&
+        !c.pending_next_stage_id &&
         c.reqs?.some(r => visibleReqIds.has(r.id))
       )
     : [];
