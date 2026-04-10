@@ -165,6 +165,7 @@ const WITH_STAGE = `
          s.color       as stage_color,
          s.order_index,
          s.is_terminal,
+         s.is_hire,
          s.is_hm_review,
          ps.name       as pending_stage_name,
          ps.color      as pending_stage_color,
@@ -258,22 +259,45 @@ router.post('/:id/confirm-advance', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'No pending transition for this candidate' });
   }
 
-  const targetStage = db.prepare('SELECT id, is_hire FROM stages WHERE id=?')
+  const targetStage = db.prepare('SELECT id, is_hire, is_terminal, is_hm_review FROM stages WHERE id=?')
     .get(candidate.pending_next_stage_id);
   if (!targetStage) {
     return res.status(500).json({ error: 'Target stage no longer exists' });
   }
 
-  const nextDue = targetStage.is_hire ? null : bizDaysFromNow(5);
+  const nextDue       = targetStage.is_hire ? null : bizDaysFromNow(5);
+  const advanceIsElig = !targetStage.is_hm_review && !targetStage.is_terminal && !targetStage.is_hire;
 
   db.prepare(`
     UPDATE candidates
     SET stage_id = ?, stage_entered_at = datetime('now'),
         sla_reset_at = NULL, next_step_due = ?,
         pending_next_stage_id = NULL, pending_reason = NULL,
+        card_sub_status = ?, stage_event_date = NULL,
         updated_at = datetime('now')
     WHERE id = ?
-  `).run(targetStage.id, nextDue, req.params.id);
+  `).run(targetStage.id, nextDue, advanceIsElig ? 'ta_action' : null, req.params.id);
+
+  res.json({ success: true });
+});
+
+// PATCH /api/candidates/:id/card-status — TA updates sub-status and/or event date
+// Body: { sub_status: 'ta_action' | 'check_scheduled' | null, stage_event_date: 'YYYY-MM-DD' | null }
+router.patch('/:id/card-status', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT id FROM candidates WHERE id=?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+
+  const { sub_status, stage_event_date } = req.body || {};
+  const VALID = ['ta_action', 'check_scheduled', null];
+  if (!VALID.includes(sub_status ?? null)) {
+    return res.status(400).json({ error: 'Invalid sub_status' });
+  }
+
+  db.prepare(`
+    UPDATE candidates
+    SET card_sub_status = ?, stage_event_date = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(sub_status || null, stage_event_date || null, req.params.id);
 
   res.json({ success: true });
 });
@@ -363,14 +387,16 @@ router.put('/:id', requireAuth, (req, res) => {
   const stageChanged = existing && Number(existing.stage_id) !== Number(stage_id);
 
   // Check whether the new stage is a "hire" stage
-  let isHire    = false;
-  let hireReqId = null;
+  let isHire             = false;
+  let hireReqId          = null;
   let requiresScheduling = false;
+  let isEligible         = false; // eligible for card_sub_status (post-HM-review, non-terminal, non-hire)
   if (stageChanged) {
-    const newStage = db.prepare('SELECT is_hire, requires_scheduling FROM stages WHERE id=?').get(stage_id);
+    const newStage     = db.prepare('SELECT is_hire, is_terminal, is_hm_review, requires_scheduling FROM stages WHERE id=?').get(stage_id);
     isHire             = !!newStage?.is_hire;
     requiresScheduling = !!newStage?.requires_scheduling;
     hireReqId          = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
+    isEligible         = !newStage?.is_hm_review && !newStage?.is_terminal && !newStage?.is_hire;
   }
 
   const tx = db.transaction(() => {
@@ -388,19 +414,17 @@ router.put('/:id', requireAuth, (req, res) => {
 
     if (stageChanged) {
       // Clear any pending transition when the stage is manually moved
-      sql += `, sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL`;
-      if (requiresScheduling) {
-        // Half-stage: pause SLA until scheduling is confirmed
-        sql += `, schedule_pending=1`;
+      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL`;
+      sql += `, card_sub_status=?, stage_event_date=NULL`;
+      args.push(isEligible ? 'ta_action' : null);
+      sql += `, schedule_pending=?`;
+      args.push(requiresScheduling && !isEligible ? 1 : 0);
+      if (isHire) {
+        sql += `, next_step_due=NULL, hired_for_req_id=?`;
+        args.push(hireReqId);
       } else {
-        sql += `, stage_entered_at=datetime('now'), schedule_pending=0`;
-        if (isHire) {
-          sql += `, next_step_due=NULL, hired_for_req_id=?`;
-          args.push(hireReqId);
-        } else {
-          sql += `, next_step_due=?, hired_for_req_id=NULL`;
-          args.push(bizDaysFromNow(5));
-        }
+        sql += `, next_step_due=?, hired_for_req_id=NULL`;
+        args.push(bizDaysFromNow(5));
       }
     }
 

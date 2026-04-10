@@ -124,6 +124,8 @@ db.exec(`
   'hired_for_req_id       INTEGER',
   'pending_next_stage_id  INTEGER REFERENCES stages(id)',
   'pending_reason         TEXT',
+  'card_sub_status        TEXT',
+  'stage_event_date       TEXT',
 ].forEach(col => {
   try { db.exec(`ALTER TABLE candidates ADD COLUMN ${col}`); } catch (_) {}
 });
