@@ -136,7 +136,7 @@ db.exec(`
 });
 
 // Stages migrations
-['is_hire INTEGER DEFAULT 0', 'is_hm_review INTEGER DEFAULT 0'].forEach(col => {
+['is_hire INTEGER DEFAULT 0', 'is_hm_review INTEGER DEFAULT 0', 'is_withdraw INTEGER DEFAULT 0'].forEach(col => {
   try { db.exec(`ALTER TABLE stages ADD COLUMN ${col}`); } catch (_) {}
 });
 
@@ -204,9 +204,12 @@ if (stageCount === 0) {
     ['Technical Interview',      4, '#8B5CF6', 0, 0, 0],
     ['Onsite / Final Interview', 5, '#F59E0B', 0, 0, 0],
     ['Offer',                    6, '#10B981', 0, 0, 0],
-    ['Hired',                    7, '#22C55E', 1, 1, 0],
-    ['Rejected / Closed',        8, '#EF4444', 1, 0, 0],
+    ['Hired',                              7, '#22C55E', 1, 1, 0],
+    ['Rejected / Closed',                  8, '#EF4444', 1, 0, 0],
+    ['Candidate Withdrew / Declined',      9, '#94A3B8', 1, 0, 0],
   ].forEach(row => ins.run(...row));
+  // Mark the withdraw stage
+  db.prepare("UPDATE stages SET is_withdraw = 1 WHERE name = 'Candidate Withdrew / Declined'").run();
 }
 
 // For existing databases: seed the "Hired" stage if it doesn't exist
@@ -229,6 +232,15 @@ if (!hmReviewStageExists) {
   db.prepare(
     "INSERT OR IGNORE INTO stages (name, order_index, color, is_terminal, is_hire, is_hm_review) VALUES (?, ?, '#F97316', 0, 0, 1)"
   ).run('HM Review', insertAt);
+}
+
+// For existing databases: seed the "Candidate Withdrew / Declined" stage if it doesn't exist
+const withdrawStageExists = db.prepare("SELECT id FROM stages WHERE is_withdraw = 1").get();
+if (!withdrawStageExists) {
+  const maxOrder = db.prepare('SELECT MAX(order_index) as m FROM stages').get().m || 0;
+  db.prepare(
+    "INSERT OR IGNORE INTO stages (name, order_index, color, is_terminal, is_hire, is_hm_review, is_withdraw) VALUES (?, ?, '#94A3B8', 1, 0, 0, 1)"
+  ).run('Candidate Withdrew / Declined', maxOrder + 1);
 }
 
 // Settings table (key/value store)
