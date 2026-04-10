@@ -9,7 +9,7 @@ const STATUS_STYLES = {
 };
 const STATUS_LABELS = { open: 'Open', on_hold: 'On Hold', closed: 'Closed' };
 
-const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', hiring_manager: '', recruiter: '', script_doc_url: '' };
+const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', hiring_manager: '', recruiter: '', script_doc_url: '', job_description: '', is_public: false };
 
 const WD_SLOT_STATUS_STYLES = {
   open:   'bg-emerald-50 text-emerald-700 border border-emerald-200',
@@ -32,6 +32,7 @@ export default function Reqs() {
   const [loading, setLoading]   = useState(true);
   const [users, setUsers]       = useState([]);   // recruiters (also sourcers)
   const [hmUsers, setHmUsers]   = useState([]);   // hiring managers
+  const [copied, setCopied]     = useState(null); // req id that was just copied
 
   // WD slots state: { [reqId]: { slots: [], expanded: bool, newReqId: '', newLabel: '', adding: bool, err: '' } }
   const [wdSlotState, setWdSlotState] = useState({});
@@ -114,13 +115,25 @@ export default function Reqs() {
 
   const startEdit = (r) => {
     setEditId(r.id);
-    setEditForm({ req_id: r.req_id, title: r.title, department: r.department || '', status: r.status, hiring_manager: r.hiring_manager || '', recruiter: r.recruiter || '', script_doc_url: r.script_doc_url || '' });
+    setEditForm({ req_id: r.req_id, title: r.title, department: r.department || '', status: r.status, hiring_manager: r.hiring_manager || '', recruiter: r.recruiter || '', script_doc_url: r.script_doc_url || '', job_description: r.job_description || '', is_public: !!r.is_public });
+  };
+
+  const copyLink = (r) => {
+    const url = `${window.location.origin}/jobs/${r.public_token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(r.id);
+      setTimeout(() => setCopied(null), 2000);
+    });
   };
 
   const saveEdit = async (r) => {
     setError('');
-    const res = await api.updateReq(r.id, editForm);
+    const res = await api.updateReq(r.id, { ...editForm, is_public: editForm.is_public ? 1 : 0 });
     if (res.error) { setError(res.error); return; }
+    // Persist the returned public_token back into local state immediately.
+    if (res.public_token) {
+      setReqs(prev => prev.map(x => x.id === r.id ? { ...x, public_token: res.public_token, is_public: editForm.is_public ? 1 : 0 } : x));
+    }
     setEditId(null);
     load();
   };
@@ -223,6 +236,7 @@ export default function Reqs() {
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Department</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Candidates</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Job Page</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -306,6 +320,30 @@ export default function Reqs() {
                               className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                           </div>
+                          <div className="w-full">
+                            <label className="block text-xs text-slate-500 mb-1">Job Description (shown on public posting page)</label>
+                            <textarea
+                              value={editForm.job_description}
+                              onChange={setEdit('job_description')}
+                              rows={6}
+                              placeholder="Describe the role, responsibilities, requirements, and what makes this a great opportunity…"
+                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 pb-0.5">
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                              <div
+                                onClick={() => setEditForm(f => ({ ...f, is_public: !f.is_public }))}
+                                className={`relative w-8 h-4 rounded-full transition-colors ${editForm.is_public ? 'bg-violet-600' : 'bg-slate-300'}`}
+                              >
+                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${editForm.is_public ? 'translate-x-4' : ''}`} />
+                              </div>
+                              <span className="text-xs text-slate-600">Make public</span>
+                            </label>
+                            {editForm.is_public && (
+                              <span className="text-xs text-slate-400">(generates a shareable link)</span>
+                            )}
+                          </div>
                           <div className="flex gap-2 pb-0.5">
                             <button
                               onClick={() => saveEdit(r)}
@@ -338,6 +376,29 @@ export default function Reqs() {
                             ? <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full">{r.candidate_count}</span>
                             : <span className="text-slate-300">0</span>
                           }
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {r.is_public && r.public_token ? (
+                            <button
+                              onClick={() => copyLink(r)}
+                              title={`${window.location.origin}/jobs/${r.public_token}`}
+                              className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-violet-50 text-violet-700 rounded-lg hover:bg-violet-100 transition-colors"
+                            >
+                              {copied === r.id ? (
+                                <>
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                  Copied
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                  Copy Link
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-slate-300 text-xs">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 justify-end">
