@@ -16,6 +16,9 @@ const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploa
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 app.use('/uploads', express.static(UPLOADS_DIR));
 
+// Public job posting routes — no auth required, must be mounted before auth middleware
+app.use('/api/public',        require('./routes/public'));
+
 app.use('/api/auth',          require('./routes/auth'));
 app.use('/api/users',         require('./routes/users'));
 app.use('/api/candidates',    require('./routes/candidates'));

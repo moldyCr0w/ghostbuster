@@ -13,7 +13,8 @@ import Pokedex    from './pages/Pokedex';
 import Login      from './pages/Login';
 import HMView     from './pages/HMView';
 import HMLogin    from './pages/HMLogin';
-import Schedule   from './pages/Schedule';
+import Schedule    from './pages/Schedule';
+import JobPosting  from './pages/JobPosting';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -232,6 +233,7 @@ export default function App() {
         <Route path="/hm/login"       element={<HMLogin onAuthenticated={() => { window.location.href = '/hm'; }} />} />
         <Route path="/hm"             element={<HMView />} />
         <Route path="/schedule/:token" element={<Schedule />} />
+        <Route path="/jobs/:token"     element={<JobPosting />} />
 
         {/* Everything else is protected */}
         <Route

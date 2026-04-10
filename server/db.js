@@ -129,7 +129,7 @@ db.exec(`
 });
 
 // Reqs migrations
-['hiring_manager TEXT', 'recruiter TEXT', 'script_doc_url TEXT'].forEach(col => {
+['hiring_manager TEXT', 'recruiter TEXT', 'script_doc_url TEXT', 'job_description TEXT', 'public_token TEXT', 'is_public INTEGER DEFAULT 0'].forEach(col => {
   try { db.exec(`ALTER TABLE reqs ADD COLUMN ${col}`); } catch (_) {}
 });
 
