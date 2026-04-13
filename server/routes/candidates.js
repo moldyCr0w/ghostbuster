@@ -414,7 +414,8 @@ router.put('/:id', requireAuth, (req, res) => {
 
     if (stageChanged) {
       // Clear any pending transition when the stage is manually moved
-      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL`;
+      // Also reset the HM reminder so it can fire again if the candidate re-enters HM Review
+      sql += `, stage_entered_at=datetime('now'), sla_reset_at=NULL, pending_next_stage_id=NULL, pending_reason=NULL, hm_reminder_sent_at=NULL`;
       sql += `, card_sub_status=?, stage_event_date=NULL`;
       args.push(isEligible ? 'ta_action' : null);
       sql += `, schedule_pending=?`;

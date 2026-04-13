@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import WorkdayPushModal from './WorkdayPushModal';
@@ -51,24 +51,9 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const [videoNote, setVideoNote]           = useState('');
   const [videoAuthor, setVideoAuthor]       = useState(userName);
   const [videoSaving, setVideoSaving]       = useState(false);
-
-  // ── Schedule state ──
-  const [scheduleLinks, setScheduleLinks]     = useState([]);
-  const [schedPanelists, setSchedPanelists]   = useState([]);
-  const [showScheduleForm, setShowScheduleForm] = useState(false);
-  const [schedMode, setSchedMode]             = useState('self-schedule');
-  const [schedForm, setSchedForm]             = useState({
-    panelist_emails: [], duration_mins: 60,
-    window_start: '', window_end: '',
-    proposed_start: '', interview_title: '',
-  });
-  const [schedReqId, setSchedReqId]           = useState('');
-  const [schedLoading, setSchedLoading]       = useState(false);
-  const [schedError, setSchedError]           = useState('');
-  const [copiedToken, setCopiedToken]         = useState(null);
-  const [interviewTypes, setInterviewTypes]   = useState([]);
-  const [selectedItId, setSelectedItId]       = useState('');
-  const [compositionWarning, setCompositionWarning] = useState('');
+  // Pending video note for new candidates (saved after candidate is created)
+  const [pendingVideoNote, setPendingVideoNote]   = useState('');
+  const [pendingVideoAuthor, setPendingVideoAuthor] = useState(userName);
 
   // ── Scorecard state ──
   const [scorecardReqId, setScorecardReqId] = useState(null);
@@ -103,14 +88,8 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   useEffect(() => {
     if (candidate?.id) {
       api.getVideoNotes(candidate.id).then(setVideoNotes);
-      api.getScheduleLinks(candidate.id).then(d => { if (!d.error && Array.isArray(d)) setScheduleLinks(d); });
     }
   }, [candidate?.id]);
-
-  useEffect(() => {
-    api.getPanelists().then(d => { if (Array.isArray(d)) setSchedPanelists(d); }).catch(() => {});
-    api.getInterviewTypes().then(d => { if (Array.isArray(d)) setInterviewTypes(d); }).catch(() => {});
-  }, []);
 
   // Load scorecard when editing and reqs are known
   const loadScorecard = useCallback(async (reqId) => {
@@ -169,7 +148,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   // HM Review stage — used for the "Submit for HM Review" button
   const hmReviewStage   = stages.find(s => s.is_hm_review);
   const alreadyHmReview = !!selectedStage?.is_hm_review;
-  const canSubmitHm     = !!candidate && !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
+  const canSubmitHm     = !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
 
   // Workday push — visible when the candidate is in the Offer stage
   const isOfferStage = !!candidate && selectedStage?.name?.toLowerCase() === 'offer';
@@ -218,139 +197,16 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     setSubmittingHm(true);
     await onSave({
       ...form,
-      stage_id:         hmReviewStage.id,
-      hired_for_req_id: null,
-      req_ids:          selectedIds,
-      sourced_by:       form.sourced_by ? Number(form.sourced_by) : null,
-      _resumeFile:      resumeFile,
-      _removeResume:    removeResume,
+      stage_id:            hmReviewStage.id,
+      hired_for_req_id:    null,
+      req_ids:             selectedIds,
+      sourced_by:          form.sourced_by ? Number(form.sourced_by) : null,
+      _resumeFile:         resumeFile,
+      _removeResume:       removeResume,
+      _pendingVideoNote:   !candidate && pendingVideoNote.trim() ? pendingVideoNote.trim() : undefined,
+      _pendingVideoAuthor: !candidate && pendingVideoNote.trim() ? (pendingVideoAuthor || userName || null) : undefined,
     });
     setSubmittingHm(false);
-  };
-
-  // ── Interview type derived values ──
-  const selectedIt = interviewTypes.find(it => it.id === Number(selectedItId)) ?? null;
-
-  const eligiblePanelists = useMemo(() => {
-    if (!selectedIt) return schedPanelists;
-    return schedPanelists.filter(p => {
-      const levels = p.interview_levels || [];
-      // staff_plus qualifies for senior-level interviews too
-      const levelOk = levels.includes(selectedIt.level_requirement)
-        || (selectedIt.level_requirement === 'senior' && levels.includes('staff_plus'));
-      if (!levelOk) return false;
-      if (selectedIt.required_tag_id) {
-        const tagIds = p.qualifications.map(t => (typeof t === 'object' ? t.id : t));
-        return tagIds.includes(selectedIt.required_tag_id);
-      }
-      return true;
-    });
-  }, [selectedIt, schedPanelists]); // eslint-disable-line
-
-  const handleInterviewTypeChange = (itId) => {
-    setSelectedItId(itId);
-    setCompositionWarning('');
-    if (!itId) return;
-    const it = interviewTypes.find(t => t.id === Number(itId));
-    if (!it) return;
-    setSchedForm(f => ({
-      ...f,
-      duration_mins: it.duration_mins,
-      panelist_emails: f.panelist_emails.filter(email => {
-        const p = schedPanelists.find(p => p.email === email);
-        if (!p) return false;
-        const levels = p.interview_levels || [];
-        const levelOk = levels.includes(it.level_requirement)
-          || (it.level_requirement === 'senior' && levels.includes('staff_plus'));
-        if (!levelOk) return false;
-        if (it.required_tag_id) {
-          const tagIds = p.qualifications.map(t => (typeof t === 'object' ? t.id : t));
-          return tagIds.includes(it.required_tag_id);
-        }
-        return true;
-      }),
-    }));
-  };
-
-  // Composition validation
-  useEffect(() => {
-    if (!selectedIt || schedForm.panelist_emails.length === 0) {
-      setCompositionWarning('');
-      return;
-    }
-    const selected = schedForm.panelist_emails
-      .map(email => schedPanelists.find(p => p.email === email))
-      .filter(Boolean);
-    if (selected.length < selectedIt.min_panelists) {
-      setCompositionWarning(`This interview type requires at least ${selectedIt.min_panelists} panelist(s).`);
-      return;
-    }
-    if (selectedIt.level_requirement === 'staff_plus') {
-      const hasStaffPlus = selected.some(p => (p.interview_levels || []).includes('staff_plus'));
-      if (!hasStaffPlus) {
-        setCompositionWarning('Staff+ interviews require at least one Staff+ qualified panelist.');
-        return;
-      }
-    }
-    setCompositionWarning('');
-  }, [schedForm.panelist_emails, selectedIt, schedPanelists]); // eslint-disable-line
-
-  // ── Schedule handler ──
-  // Round-robin mode: self-schedule + interview type selected →
-  //   send interview_type_id instead of panelist_emails; server assigns panel at booking time.
-  const isRoundRobin = schedMode === 'self-schedule' && !!selectedIt;
-
-  const handleCreateScheduleLink = async () => {
-    setSchedError('');
-    setSchedLoading(true);
-    try {
-      const payload = {
-        candidate_id:    candidate.id,
-        mode:            schedMode,
-        duration_mins:   schedForm.duration_mins,
-        interview_title: schedForm.interview_title || selectedIt?.name || undefined,
-      };
-
-      if (schedReqId) payload.req_id = Number(schedReqId);
-
-      // For round-robin self-schedule, send interview_type_id — no manual panelists needed.
-      // For propose mode (or self-schedule without a type), send the manually selected panelists.
-      if (isRoundRobin) {
-        payload.interview_type_id = selectedIt.id;
-      } else {
-        payload.panelist_emails = schedForm.panelist_emails;
-        if (selectedIt) payload.interview_type_id = selectedIt.id; // for info/title fallback
-      }
-
-      if (schedMode === 'self-schedule') {
-        if (!schedForm.window_start || !schedForm.window_end) {
-          setSchedError('Start and end dates are required.');
-          setSchedLoading(false);
-          return;
-        }
-        payload.window_start = `${schedForm.window_start}T00:00:00Z`;
-        payload.window_end   = `${schedForm.window_end}T23:59:59Z`;
-      } else {
-        if (!schedForm.proposed_start) {
-          setSchedError('Proposed time is required.');
-          setSchedLoading(false);
-          return;
-        }
-        payload.proposed_start = schedForm.proposed_start;
-      }
-      const result = await api.createScheduleLink(payload);
-      if (result.error) { setSchedError(result.error); } else {
-        setScheduleLinks(prev => [result, ...prev]);
-        setShowScheduleForm(false);
-        setSelectedItId('');
-        setSchedReqId('');
-        setCompositionWarning('');
-        setSchedForm({ panelist_emails: [], duration_mins: 60, window_start: '', window_end: '', proposed_start: '', interview_title: '' });
-      }
-    } catch (err) {
-      setSchedError(err.message || 'Failed to create link');
-    }
-    setSchedLoading(false);
   };
 
   const handleConfirmAdvance = async () => {
@@ -368,12 +224,14 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     setSaving(true);
     await onSave({
       ...form,
-      stage_id:         Number(form.stage_id),
-      hired_for_req_id: isHireStage && form.hired_for_req_id ? Number(form.hired_for_req_id) : null,
-      req_ids:          selectedIds,
-      sourced_by:       form.sourced_by ? Number(form.sourced_by) : null,
-      _resumeFile:      resumeFile,
-      _removeResume:    removeResume,
+      stage_id:            Number(form.stage_id),
+      hired_for_req_id:    isHireStage && form.hired_for_req_id ? Number(form.hired_for_req_id) : null,
+      req_ids:             selectedIds,
+      sourced_by:          form.sourced_by ? Number(form.sourced_by) : null,
+      _resumeFile:         resumeFile,
+      _removeResume:       removeResume,
+      _pendingVideoNote:   !candidate && pendingVideoNote.trim() ? pendingVideoNote.trim() : undefined,
+      _pendingVideoAuthor: !candidate && pendingVideoNote.trim() ? (pendingVideoAuthor || userName || null) : undefined,
     });
     setSaving(false);
   };
@@ -838,8 +696,31 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
             />
           </div>
 
-          {/* ── Video Screen Notes (edit mode only) ── */}
-          {candidate && (
+          {/* ── Video Screen Notes ── */}
+          {!candidate ? (
+            /* New candidate: inline textarea stored locally, posted after creation */
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Video Screen Note <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <div className="border border-slate-200 rounded-lg overflow-hidden space-y-0">
+                <input
+                  value={pendingVideoAuthor}
+                  onChange={e => setPendingVideoAuthor(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full border-b border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                />
+                <textarea
+                  rows={4}
+                  value={pendingVideoNote}
+                  onChange={e => setPendingVideoNote(e.target.value)}
+                  placeholder="Notes from the video screen (Granola, Gemini, etc.)…"
+                  className="w-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset resize-y min-h-[80px]"
+                />
+              </div>
+            </div>
+          ) : (
+            /* Edit mode: existing notes list + add form */
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
                 Video Screen Notes
@@ -921,281 +802,6 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
             </div>
           )}
 
-          {/* ── Schedule Interview (edit mode only) ── */}
-          {candidate && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                Schedule Interview
-                {scheduleLinks.filter(l => l.status === 'booked').length > 0 && (
-                  <span className="ml-1.5 px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-normal">
-                    {scheduleLinks.filter(l => l.status === 'booked').length} booked
-                  </span>
-                )}
-              </label>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-
-                {/* Existing links */}
-                {scheduleLinks.length > 0 && (
-                  <div className="divide-y divide-slate-100">
-                    {scheduleLinks.map(link => (
-                      <div key={link.id} className="px-3 py-2 flex items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${link.status === 'booked' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                              {link.status === 'booked' ? 'Booked' : 'Pending'}
-                            </span>
-                            <span className="text-xs text-slate-500">
-                              {link.mode === 'propose' ? 'Proposed time' : 'Self-schedule'}
-                            </span>
-                            {link.interview_title && (
-                              <span className="text-xs text-slate-700 font-medium truncate">{link.interview_title}</span>
-                            )}
-                          </div>
-                          {link.event_start && (
-                            <p className="text-xs text-slate-600 mt-0.5">{fmtDate(link.event_start)}</p>
-                          )}
-                          {link.meet_link && (
-                            <a href={link.meet_link} target="_blank" rel="noreferrer"
-                               className="text-xs text-blue-600 hover:underline">
-                              Join Meet
-                            </a>
-                          )}
-                        </div>
-                        {link.status === 'pending' && link.mode === 'self-schedule' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const url = `${window.location.origin}/schedule/${link.token}`;
-                              navigator.clipboard.writeText(url).then(() => {
-                                setCopiedToken(link.token);
-                                setTimeout(() => setCopiedToken(null), 2000);
-                              });
-                            }}
-                            className="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded shrink-0"
-                          >
-                            {copiedToken === link.token ? 'Copied!' : 'Copy link'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {scheduleLinks.length === 0 && !showScheduleForm && (
-                  <p className="px-3 py-3 text-xs text-slate-400 italic">No interviews scheduled yet.</p>
-                )}
-
-                {/* Create form */}
-                {showScheduleForm ? (
-                  <div className="px-3 py-3 bg-slate-50 border-t border-slate-100 space-y-3">
-
-                    {/* Interview Type */}
-                    <div>
-                      <p className="text-xs text-slate-500 mb-1">Interview type</p>
-                      <select
-                        value={selectedItId}
-                        onChange={e => handleInterviewTypeChange(e.target.value)}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">— Select a type —</option>
-                        {interviewTypes.map(it => (
-                          <option key={it.id} value={it.id}>
-                            {it.name} · {it.duration_mins}m · {it.level_requirement === 'staff_plus' ? 'Staff+' : 'Senior'}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Req (shown when candidate is linked to any reqs) */}
-                    {linkedReqs.length > 0 && (
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">Requisition</p>
-                        <select
-                          value={schedReqId}
-                          onChange={e => setSchedReqId(e.target.value)}
-                          className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                        >
-                          <option value="">— Select req —</option>
-                          {linkedReqs.map(r => (
-                            <option key={r.id} value={r.id}>
-                              {r.req_id} · {r.title}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Title */}
-                    <input
-                      type="text"
-                      value={schedForm.interview_title}
-                      onChange={e => setSchedForm(f => ({ ...f, interview_title: e.target.value }))}
-                      placeholder={selectedIt ? `Interview title (defaults to "${selectedIt.name}")` : 'Interview title (optional)'}
-                      className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-
-                    {/* Mode toggle */}
-                    <div className="flex gap-2">
-                      {['self-schedule', 'propose'].map(m => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setSchedMode(m)}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${schedMode === m ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                        >
-                          {m === 'self-schedule' ? 'Self-schedule' : 'Propose a time'}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Duration */}
-                    <div>
-                      <p className="text-xs text-slate-500 mb-1">
-                        Duration{selectedIt ? <span className="text-blue-500 ml-1">(auto-filled from type)</span> : ''}
-                      </p>
-                      <div className="flex gap-2">
-                        {[30, 45, 60, 90, 120].map(d => (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => setSchedForm(f => ({ ...f, duration_mins: d }))}
-                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${schedForm.duration_mins === d ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                          >
-                            {d}m
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Panelists — round-robin info pill or manual checkboxes */}
-                    {isRoundRobin ? (
-                      // Round-robin: self-schedule + interview type → server auto-assigns panel
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
-                        <p className="text-xs font-semibold text-blue-700">Round-robin auto-assignment</p>
-                        <p className="text-xs text-blue-600 mt-0.5">
-                          {eligiblePanelists.length > 0
-                            ? <>{eligiblePanelists.length} eligible panelist{eligiblePanelists.length !== 1 ? 's' : ''} in pool · {selectedIt.min_panelists} will be assigned at booking</>
-                            : <span className="text-amber-600">No eligible panelists for this interview type yet.</span>
-                          }
-                        </p>
-                      </div>
-                    ) : schedPanelists.length > 0 && (
-                      // Manual selection: propose mode, or self-schedule without a type
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">
-                          Panelists
-                          {selectedIt && eligiblePanelists.length < schedPanelists.length && (
-                            <span className="text-amber-600 ml-1">
-                              ({eligiblePanelists.length} of {schedPanelists.length} eligible)
-                            </span>
-                          )}
-                        </p>
-                        {eligiblePanelists.length === 0 ? (
-                          <p className="text-xs text-amber-600 italic">
-                            No panelists match the requirements for this interview type.
-                          </p>
-                        ) : (
-                          <div className="max-h-28 overflow-y-auto space-y-1">
-                            {eligiblePanelists.map(p => (
-                              <label key={p.id} className="flex items-center gap-2 text-xs cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={schedForm.panelist_emails.includes(p.email)}
-                                  onChange={() => setSchedForm(f => ({
-                                    ...f,
-                                    panelist_emails: f.panelist_emails.includes(p.email)
-                                      ? f.panelist_emails.filter(e => e !== p.email)
-                                      : [...f.panelist_emails, p.email],
-                                  }))}
-                                  className="rounded border-slate-300 text-blue-600"
-                                />
-                                <span className="text-slate-700">{p.name}</span>
-                                <span className="text-slate-400">{p.email}</span>
-                                {p.interview_levels?.includes('staff_plus') && (
-                                  <span className="ml-auto text-purple-600 font-semibold text-xs">Staff+</span>
-                                )}
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Composition warning — only shown in manual mode */}
-                    {!isRoundRobin && compositionWarning && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        <p className="text-xs text-amber-700">{compositionWarning}</p>
-                      </div>
-                    )}
-
-                    {/* Date inputs */}
-                    {schedMode === 'self-schedule' ? (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-0.5">Window start</label>
-                          <input
-                            type="date"
-                            value={schedForm.window_start}
-                            onChange={e => setSchedForm(f => ({ ...f, window_start: e.target.value }))}
-                            className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-0.5">Window end</label>
-                          <input
-                            type="date"
-                            value={schedForm.window_end}
-                            onChange={e => setSchedForm(f => ({ ...f, window_end: e.target.value }))}
-                            className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-0.5">Proposed date & time</label>
-                        <input
-                          type="datetime-local"
-                          value={schedForm.proposed_start}
-                          onChange={e => setSchedForm(f => ({ ...f, proposed_start: e.target.value }))}
-                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    )}
-
-                    {schedError && <p className="text-xs text-red-600">{schedError}</p>}
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCreateScheduleLink}
-                        disabled={schedLoading || (!isRoundRobin && !!compositionWarning)}
-                        className="flex-1 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
-                      >
-                        {schedLoading ? 'Creating…' : schedMode === 'propose' ? 'Create Event' : 'Generate Link'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowScheduleForm(false); setSchedError(''); setSelectedItId(''); setSchedReqId(''); setCompositionWarning(''); }}
-                        className="px-4 py-1.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-lg hover:bg-slate-200"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="px-3 py-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setShowScheduleForm(true)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      + Schedule Interview
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </form>
 
         {/* Footer */}

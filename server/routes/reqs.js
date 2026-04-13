@@ -19,12 +19,12 @@ router.get('/', (req, res) => {
 
 // POST /api/reqs  — senior_recruiter+
 router.post('/', requireAuth, requireRole('senior_recruiter'), (req, res) => {
-  const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description } = req.body;
+  const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description, plan_id } = req.body;
   if (!req_id || !title) return res.status(400).json({ error: 'req_id and title are required' });
   try {
     const r = db.prepare(
-      'INSERT INTO reqs (req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(req_id.trim(), title.trim(), department || null, status || 'open', hiring_manager || null, recruiter || null, script_doc_url || null, job_description || null);
+      'INSERT INTO reqs (req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(req_id.trim(), title.trim(), department || null, status || 'open', hiring_manager || null, recruiter || null, script_doc_url || null, job_description || null, plan_id ? Number(plan_id) : null);
     res.status(201).json({ id: r.lastInsertRowid });
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(400).json({ error: `Req ID "${req_id}" already exists` });
@@ -34,7 +34,7 @@ router.post('/', requireAuth, requireRole('senior_recruiter'), (req, res) => {
 
 // PUT /api/reqs/:id  — senior_recruiter+
 router.put('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
-  const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description, is_public } = req.body;
+  const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description, is_public, plan_id } = req.body;
   if (!req_id || !title) return res.status(400).json({ error: 'req_id and title are required' });
   try {
     // Auto-generate a public token when making a req public for the first time.
@@ -44,8 +44,8 @@ router.put('/:id', requireAuth, requireRole('senior_recruiter'), (req, res) => {
       token = crypto.randomBytes(16).toString('hex');
     }
     db.prepare(
-      'UPDATE reqs SET req_id=?, title=?, department=?, status=?, hiring_manager=?, recruiter=?, script_doc_url=?, job_description=?, is_public=?, public_token=COALESCE(?, public_token) WHERE id=?'
-    ).run(req_id.trim(), title.trim(), department || null, status || 'open', hiring_manager || null, recruiter || null, script_doc_url || null, job_description || null, is_public ? 1 : 0, token || null, req.params.id);
+      'UPDATE reqs SET req_id=?, title=?, department=?, status=?, hiring_manager=?, recruiter=?, script_doc_url=?, job_description=?, is_public=?, public_token=COALESCE(?, public_token), plan_id=? WHERE id=?'
+    ).run(req_id.trim(), title.trim(), department || null, status || 'open', hiring_manager || null, recruiter || null, script_doc_url || null, job_description || null, is_public ? 1 : 0, token || null, plan_id ? Number(plan_id) : null, req.params.id);
     const updated = db.prepare('SELECT public_token FROM reqs WHERE id = ?').get(req.params.id);
     res.json({ success: true, public_token: updated?.public_token || null });
   } catch (err) {

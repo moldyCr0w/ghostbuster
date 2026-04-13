@@ -32,11 +32,10 @@ app.use('/api/google-auth',    require('./routes/googleAuth'));
 app.use('/api/panelist-tags',  require('./routes/panelistTags'));
 app.use('/api/panelists',       require('./routes/panelists'));
 app.use('/api/interview-types', require('./routes/interviewTypes'));
-app.use('/api/schedule',        require('./routes/schedule'));
-app.use('/api/scheduling-tool', require('./routes/schedulingTool'));
-app.use('/api/reqs/:reqId/interview-plan', require('./routes/reqInterviewPlans'));
-app.use('/api/pokedex',         require('./routes/pokedex'));
-app.use('/api/workday',         require('./routes/workday'));
+app.use('/api/schedule',         require('./routes/schedule'));
+app.use('/api/interview-plans',  require('./routes/interviewPlans'));
+app.use('/api/pokedex',          require('./routes/pokedex'));
+app.use('/api/workday',          require('./routes/workday'));
 
 // Serve the built React app whenever the dist folder exists.
 // Works in production (Railway) without requiring NODE_ENV to be set.
@@ -48,4 +47,13 @@ if (fs.existsSync(DIST)) {
 }
 
 const PORT = process.env.API_PORT || process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`API server running at http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`API server running at http://localhost:${PORT}`);
+
+  // Run HM 24-hour reminder check on startup and then every hour
+  const { sendHmReminders } = require('./reminders');
+  sendHmReminders().catch(err => console.error('[reminders] Startup check failed:', err.message));
+  setInterval(() => {
+    sendHmReminders().catch(err => console.error('[reminders] Hourly check failed:', err.message));
+  }, 60 * 60 * 1000); // every hour
+});
