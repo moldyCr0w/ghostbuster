@@ -193,9 +193,10 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, i
     .filter(c => !c._isPending)
     .sort((a, b) => {
       const priority = c => {
-        if (c.next_step_due && c.next_step_due < today) return 0; // overdue (green)
-        if (c.is_hm_review) return 1;                             // awaiting HM (yellow)
-        return 2;                                                  // default (white)
+        const sub = isEligible ? c.card_sub_status : null;
+        if (sub === 'ta_action')        return 0; // green  — TA action needed
+        if (sub === 'check_scheduled')  return 1; // yellow — awaiting confirmation
+        return 2;                                  // white  — no action
       };
       const pd = priority(a) - priority(b);
       if (pd !== 0) return pd;
