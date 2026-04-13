@@ -111,6 +111,11 @@ export const api = {
   updateHmUser: (id, data) => req(`/hm-users/${id}`, { method: 'PUT',   body: JSON.stringify(data) }),
   deleteHmUser: (id)      => req(`/hm-users/${id}`, { method: 'DELETE' }),
 
+  // ── Google Calendar integration ────────────────────────────────
+  googleAuthStatus:     ()  => req('/google-auth/status'),
+  googleAuthUrl:        ()  => req('/google-auth/url'),
+  googleAuthDisconnect: ()  => req('/google-auth/disconnect', { method: 'DELETE' }),
+
   // ── Panelist tags ──────────────────────────────────────────────
   getPanelistTags:    ()         => req('/panelist-tags'),
   createPanelistTag:  (data)     => req('/panelist-tags',       { method: 'POST',   body: JSON.stringify(data) }),
