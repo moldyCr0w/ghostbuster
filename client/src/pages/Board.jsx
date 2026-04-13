@@ -150,9 +150,9 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
           </button>
           <button
             onClick={e => handleStatusClick(e, null, null)}
-            className="flex-[2] text-xs text-green-700 bg-green-100 hover:bg-green-200 rounded px-1.5 py-1 transition-colors"
+            className="flex-[2] text-xs text-white bg-red-500 hover:bg-red-600 rounded px-1.5 py-1 transition-colors font-medium"
           >
-            ✓ Scheduled
+            Mark as Scheduled
           </button>
         </div>
       )}
