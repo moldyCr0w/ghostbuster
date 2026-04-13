@@ -182,8 +182,27 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, i
     if (id) onDrop(id, stage.id);
   };
 
-  const pendingCandidates = candidates.filter(c => c._isPending);
-  const activeCandidates  = candidates.filter(c => !c._isPending);
+  const pendingCandidates = candidates
+    .filter(c => c._isPending)
+    .sort((a, b) => {
+      const na = (a.display_name || a.name || '').toLowerCase();
+      const nb = (b.display_name || b.name || '').toLowerCase();
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    });
+  const activeCandidates  = candidates
+    .filter(c => !c._isPending)
+    .sort((a, b) => {
+      const priority = c => {
+        if (c.next_step_due && c.next_step_due < today) return 0; // overdue (green)
+        if (c.is_hm_review) return 1;                             // awaiting HM (yellow)
+        return 2;                                                  // default (white)
+      };
+      const pd = priority(a) - priority(b);
+      if (pd !== 0) return pd;
+      const na = (a.display_name || a.name || '').toLowerCase();
+      const nb = (b.display_name || b.name || '').toLowerCase();
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    });
   const overdue = activeCandidates.filter(c => c.next_step_due && c.next_step_due < today).length;
 
   return (
