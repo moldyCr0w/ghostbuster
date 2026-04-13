@@ -360,6 +360,31 @@ try { db.exec('ALTER TABLE candidates ADD COLUMN hm_decided_by TEXT'); } catch (
 // Track when the 24-hour HM reminder was sent (reset when candidate leaves HM Review)
 try { db.exec('ALTER TABLE candidates ADD COLUMN hm_reminder_sent_at TEXT'); } catch (_) {}
 
+// ── Interview Plans ───────────────────────────────────────────────────────────
+// A named template describing the ordered interview steps for a position type.
+// Steps are linked to pipeline stages so the tracker knows which stage = which round.
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS interview_plans (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL UNIQUE,
+      description TEXT,
+      created_at  TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS interview_plan_steps (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id     INTEGER NOT NULL REFERENCES interview_plans(id) ON DELETE CASCADE,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      name        TEXT    NOT NULL,
+      stage_id    INTEGER REFERENCES stages(id) ON DELETE SET NULL
+    );
+  `);
+} catch (_) {}
+
+// Link a req to an interview plan
+try { db.exec('ALTER TABLE reqs ADD COLUMN plan_id INTEGER REFERENCES interview_plans(id) ON DELETE SET NULL'); } catch (_) {}
+
 // Interview types (configurable panel interview definitions)
 try {
   db.exec(`
