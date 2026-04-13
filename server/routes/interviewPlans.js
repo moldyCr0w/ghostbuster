@@ -102,6 +102,24 @@ router.post('/:id/steps', (req, res) => {
   res.status(201).json(planWithSteps(req.params.id));
 });
 
+// PUT /api/interview-plans/:id/steps/reorder  — body: { order: [stepId, stepId, ...] }
+// Must be defined BEFORE /:id/steps/:stepId to avoid Express matching "reorder" as a stepId
+router.put('/:id/steps/reorder', (req, res) => {
+  const plan = db.prepare('SELECT id FROM interview_plans WHERE id = ?').get(req.params.id);
+  if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+  const { order } = req.body || {};
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array of step IDs' });
+
+  const upd = db.prepare('UPDATE interview_plan_steps SET order_index = ? WHERE id = ? AND plan_id = ?');
+  const tx  = db.transaction(() => {
+    order.forEach((stepId, idx) => upd.run(idx, stepId, req.params.id));
+  });
+  tx();
+
+  res.json(planWithSteps(req.params.id));
+});
+
 // PUT /api/interview-plans/:id/steps/:stepId
 router.put('/:id/steps/:stepId', (req, res) => {
   const step = db.prepare('SELECT id FROM interview_plan_steps WHERE id = ? AND plan_id = ?').get(req.params.stepId, req.params.id);
@@ -123,23 +141,6 @@ router.delete('/:id/steps/:stepId', (req, res) => {
   if (!step) return res.status(404).json({ error: 'Step not found' });
 
   db.prepare('DELETE FROM interview_plan_steps WHERE id = ?').run(req.params.stepId);
-  res.json(planWithSteps(req.params.id));
-});
-
-// PUT /api/interview-plans/:id/steps/reorder  — body: { order: [stepId, stepId, ...] }
-router.put('/:id/steps/reorder', (req, res) => {
-  const plan = db.prepare('SELECT id FROM interview_plans WHERE id = ?').get(req.params.id);
-  if (!plan) return res.status(404).json({ error: 'Plan not found' });
-
-  const { order } = req.body || {};
-  if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array of step IDs' });
-
-  const upd = db.prepare('UPDATE interview_plan_steps SET order_index = ? WHERE id = ? AND plan_id = ?');
-  const tx  = db.transaction(() => {
-    order.forEach((stepId, idx) => upd.run(idx, stepId, req.params.id));
-  });
-  tx();
-
   res.json(planWithSteps(req.params.id));
 });
 
