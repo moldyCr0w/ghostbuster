@@ -73,7 +73,7 @@ export default function Candidates() {
   };
 
   const handleSave = async (payload) => {
-    const { _resumeFile, _removeResume, _skipSave, ...data } = payload;
+    const { _resumeFile, _removeResume, _skipSave, _pendingVideoNote, _pendingVideoAuthor, ...data } = payload;
 
     if (!_skipSave) {
       let candidateId;
@@ -90,6 +90,11 @@ export default function Candidates() {
         await api.deleteResume(candidateId);
       } else if (_resumeFile) {
         await api.uploadResume(candidateId, _resumeFile);
+      }
+
+      // Post video screen note if one was entered while adding a new candidate
+      if (!editing && _pendingVideoNote) {
+        await api.addVideoNote(candidateId, { note: _pendingVideoNote, author: _pendingVideoAuthor || null });
       }
     }
 

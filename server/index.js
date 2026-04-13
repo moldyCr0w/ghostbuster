@@ -48,4 +48,13 @@ if (fs.existsSync(DIST)) {
 }
 
 const PORT = process.env.API_PORT || process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`API server running at http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`API server running at http://localhost:${PORT}`);
+
+  // Run HM 24-hour reminder check on startup and then every hour
+  const { sendHmReminders } = require('./reminders');
+  sendHmReminders().catch(err => console.error('[reminders] Startup check failed:', err.message));
+  setInterval(() => {
+    sendHmReminders().catch(err => console.error('[reminders] Hourly check failed:', err.message));
+  }, 60 * 60 * 1000); // every hour
+});

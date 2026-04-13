@@ -51,6 +51,9 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const [videoNote, setVideoNote]           = useState('');
   const [videoAuthor, setVideoAuthor]       = useState(userName);
   const [videoSaving, setVideoSaving]       = useState(false);
+  // Pending video note for new candidates (saved after candidate is created)
+  const [pendingVideoNote, setPendingVideoNote]   = useState('');
+  const [pendingVideoAuthor, setPendingVideoAuthor] = useState(userName);
 
   // ── Schedule state ──
   const [scheduleLinks, setScheduleLinks]     = useState([]);
@@ -169,7 +172,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   // HM Review stage — used for the "Submit for HM Review" button
   const hmReviewStage   = stages.find(s => s.is_hm_review);
   const alreadyHmReview = !!selectedStage?.is_hm_review;
-  const canSubmitHm     = !!candidate && !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
+  const canSubmitHm     = !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
 
   // Workday push — visible when the candidate is in the Offer stage
   const isOfferStage = !!candidate && selectedStage?.name?.toLowerCase() === 'offer';
@@ -218,12 +221,14 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     setSubmittingHm(true);
     await onSave({
       ...form,
-      stage_id:         hmReviewStage.id,
-      hired_for_req_id: null,
-      req_ids:          selectedIds,
-      sourced_by:       form.sourced_by ? Number(form.sourced_by) : null,
-      _resumeFile:      resumeFile,
-      _removeResume:    removeResume,
+      stage_id:            hmReviewStage.id,
+      hired_for_req_id:    null,
+      req_ids:             selectedIds,
+      sourced_by:          form.sourced_by ? Number(form.sourced_by) : null,
+      _resumeFile:         resumeFile,
+      _removeResume:       removeResume,
+      _pendingVideoNote:   !candidate && pendingVideoNote.trim() ? pendingVideoNote.trim() : undefined,
+      _pendingVideoAuthor: !candidate && pendingVideoNote.trim() ? (pendingVideoAuthor || userName || null) : undefined,
     });
     setSubmittingHm(false);
   };
@@ -368,12 +373,14 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     setSaving(true);
     await onSave({
       ...form,
-      stage_id:         Number(form.stage_id),
-      hired_for_req_id: isHireStage && form.hired_for_req_id ? Number(form.hired_for_req_id) : null,
-      req_ids:          selectedIds,
-      sourced_by:       form.sourced_by ? Number(form.sourced_by) : null,
-      _resumeFile:      resumeFile,
-      _removeResume:    removeResume,
+      stage_id:            Number(form.stage_id),
+      hired_for_req_id:    isHireStage && form.hired_for_req_id ? Number(form.hired_for_req_id) : null,
+      req_ids:             selectedIds,
+      sourced_by:          form.sourced_by ? Number(form.sourced_by) : null,
+      _resumeFile:         resumeFile,
+      _removeResume:       removeResume,
+      _pendingVideoNote:   !candidate && pendingVideoNote.trim() ? pendingVideoNote.trim() : undefined,
+      _pendingVideoAuthor: !candidate && pendingVideoNote.trim() ? (pendingVideoAuthor || userName || null) : undefined,
     });
     setSaving(false);
   };
@@ -838,8 +845,31 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
             />
           </div>
 
-          {/* ── Video Screen Notes (edit mode only) ── */}
-          {candidate && (
+          {/* ── Video Screen Notes ── */}
+          {!candidate ? (
+            /* New candidate: inline textarea stored locally, posted after creation */
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Video Screen Note <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <div className="border border-slate-200 rounded-lg overflow-hidden space-y-0">
+                <input
+                  value={pendingVideoAuthor}
+                  onChange={e => setPendingVideoAuthor(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full border-b border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+                />
+                <textarea
+                  rows={4}
+                  value={pendingVideoNote}
+                  onChange={e => setPendingVideoNote(e.target.value)}
+                  placeholder="Notes from the video screen (Granola, Gemini, etc.)…"
+                  className="w-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset resize-y min-h-[80px]"
+                />
+              </div>
+            </div>
+          ) : (
+            /* Edit mode: existing notes list + add form */
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
                 Video Screen Notes

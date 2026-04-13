@@ -357,6 +357,9 @@ try {
 // Audit trail: record which HM made the forward/decline decision
 try { db.exec('ALTER TABLE candidates ADD COLUMN hm_decided_by TEXT'); } catch (_) {}
 
+// Track when the 24-hour HM reminder was sent (reset when candidate leaves HM Review)
+try { db.exec('ALTER TABLE candidates ADD COLUMN hm_reminder_sent_at TEXT'); } catch (_) {}
+
 // Interview types (configurable panel interview definitions)
 try {
   db.exec(`

@@ -7,6 +7,12 @@ function fmtDate(iso) {
   } catch { return iso; }
 }
 
+/** Hours a candidate has been sitting in the current stage. */
+function hoursInStage(stageEnteredAt) {
+  if (!stageEnteredAt) return 0;
+  return (Date.now() - new Date(stageEnteredAt).getTime()) / (1000 * 60 * 60);
+}
+
 /* ── Stat card ─────────────────────────────────────────────────── */
 function HMStatCard({ icon, value, label, color = 'slate' }) {
   const colors = {
@@ -44,8 +50,21 @@ function HMActionCard({ candidate, req, onDecision, onViewDetails }) {
       : candidate.notes
     : null;
 
+  const hrs = hoursInStage(candidate.stage_entered_at);
+  const isOverdue = hrs >= 24;
+  const overdueLabel = hrs >= 48
+    ? `${Math.floor(hrs / 24)}d overdue`
+    : `${Math.floor(hrs)}h waiting`;
+
   return (
-    <div className="bg-white rounded-xl border-2 border-orange-200 shadow-sm p-5 w-80 shrink-0 flex flex-col">
+    <div className={`bg-white rounded-xl border-2 shadow-sm p-5 w-80 shrink-0 flex flex-col ${isOverdue ? 'border-red-300' : 'border-orange-200'}`}>
+      {/* Overdue banner */}
+      {isOverdue && (
+        <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 bg-red-50 border border-red-200 rounded-lg">
+          <span className="text-xs text-red-600 font-semibold">Action needed · {overdueLabel}</span>
+        </div>
+      )}
+
       {/* Candidate info */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
@@ -141,17 +160,26 @@ function HMKanbanCard({ candidate, stage, onDecision, onClick }) {
     onDecision(candidate.id, decision);
   };
 
+  const hrs = isHmReview ? hoursInStage(candidate.stage_entered_at) : 0;
+  const isOverdue = isHmReview && hrs >= 24;
+  const overdueLabel = hrs >= 48 ? `${Math.floor(hrs / 24)}d` : `${Math.floor(hrs)}h`;
+
   return (
     <div
       onClick={() => onClick(candidate)}
-      className={`bg-white rounded-lg border p-3 cursor-pointer hover:shadow-md transition-shadow ${
-        isHmReview ? 'border-l-4' : 'border-l-4'
-      }`}
-      style={{ borderLeftColor: stage?.color || '#94a3b8' }}
+      className="bg-white rounded-lg border border-l-4 p-3 cursor-pointer hover:shadow-md transition-shadow"
+      style={{ borderLeftColor: isOverdue ? '#ef4444' : (stage?.color || '#94a3b8') }}
     >
-      <p className="text-sm font-semibold text-slate-800 leading-tight">
-        {candidate.display_name || candidate.name}
-      </p>
+      <div className="flex items-start justify-between gap-1">
+        <p className="text-sm font-semibold text-slate-800 leading-tight">
+          {candidate.display_name || candidate.name}
+        </p>
+        {isOverdue && (
+          <span className="shrink-0 px-1.5 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded">
+            {overdueLabel}
+          </span>
+        )}
+      </div>
       {candidate.email && (
         <p className="text-xs text-slate-400 mt-0.5 truncate">{candidate.email}</p>
       )}
@@ -868,6 +896,23 @@ export default function HMView() {
               color="green"
             />
           </div>
+
+          {/* ── Overdue alert banner ── */}
+          {(() => {
+            const overdueCount = uniqueAwaiting.filter(c => hoursInStage(c.stage_entered_at) >= 24).length;
+            if (overdueCount === 0) return null;
+            return (
+              <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+                <span className="text-lg">&#9888;&#65039;</span>
+                <p className="text-sm text-red-700 font-medium">
+                  {overdueCount === 1
+                    ? '1 candidate has been waiting for your decision for more than 24 hours.'
+                    : `${overdueCount} candidates have been waiting for your decision for more than 24 hours.`}
+                  {' '}A reminder email has been sent.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* ── Action queue ── */}
           {uniqueAwaiting.length > 0 && (
