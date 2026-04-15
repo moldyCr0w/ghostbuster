@@ -5,6 +5,15 @@ import { api } from '../api';
 const HM_PLUS_TARGET = 5;
 const HEAVY_TOTAL    = 8;
 
+/* ── Priority config ───────────────────────────────────────────── */
+const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+const PRIORITY_CFG  = {
+  critical: { label: 'P1 · Critical', badge: 'bg-red-100 text-red-700 border-red-200'         },
+  high:     { label: 'P2 · High',     badge: 'bg-orange-100 text-orange-700 border-orange-200' },
+  medium:   { label: 'P3 · Medium',   badge: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  low:      { label: 'P4 · Low',      badge: 'bg-slate-100 text-slate-500 border-slate-200'    },
+};
+
 /* ── Status tiers ──────────────────────────────────────────────── */
 function getStatus(hmPlusCount) {
   if (hmPlusCount >= HM_PLUS_TARGET) return 'healthy';
@@ -128,6 +137,14 @@ function ReqHealthCard({ req, candidates, stages, hmStage }) {
                   {req.req_id}
                 </span>
               )}
+              {(() => {
+                const p = PRIORITY_CFG[req.priority] || PRIORITY_CFG.medium;
+                return (
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${p.badge}`}>
+                    {p.label}
+                  </span>
+                );
+              })()}
               <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${cfg.badgeClass}`}>
                 {cfg.label}
               </span>
@@ -310,8 +327,12 @@ export default function PipelineHealth() {
     return { req, status: getStatus(hmPlusCount) };
   });
 
-  // Sort worst-first
-  reqsWithStatus.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status]);
+  // Sort: priority first (critical → low), then worst health within same priority
+  reqsWithStatus.sort((a, b) => {
+    const pDiff = (PRIORITY_RANK[a.req.priority] ?? 2) - (PRIORITY_RANK[b.req.priority] ?? 2);
+    if (pDiff !== 0) return pDiff;
+    return STATUS_RANK[a.status] - STATUS_RANK[b.status];
+  });
 
   return (
     <div className="max-w-3xl mx-auto p-8 space-y-6">

@@ -9,7 +9,14 @@ const STATUS_STYLES = {
 };
 const STATUS_LABELS = { open: 'Open', on_hold: 'On Hold', closed: 'Closed' };
 
-const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', hiring_manager: '', recruiter: '', script_doc_url: '', job_description: '', is_public: false, plan_id: '' };
+const PRIORITY_CFG = {
+  critical: { label: 'P1 · Critical', badge: 'bg-red-100 text-red-700 border-red-200'    },
+  high:     { label: 'P2 · High',     badge: 'bg-orange-100 text-orange-700 border-orange-200' },
+  medium:   { label: 'P3 · Medium',   badge: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  low:      { label: 'P4 · Low',      badge: 'bg-slate-100 text-slate-500 border-slate-200'    },
+};
+
+const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', priority: 'medium', hiring_manager: '', recruiter: '', script_doc_url: '', job_description: '', is_public: false, plan_id: '' };
 
 const WD_SLOT_STATUS_STYLES = {
   open:   'bg-emerald-50 text-emerald-700 border border-emerald-200',
@@ -47,9 +54,9 @@ export default function Reqs() {
 
   // Load user lists and plans for dropdowns
   useEffect(() => {
-    api.getUsers().then(setUsers).catch(() => {});
-    api.getHmUsers().then(setHmUsers).catch(() => {});
-    api.getInterviewPlans().then(setPlans).catch(() => {});
+    api.getUsers().then(d => setUsers(Array.isArray(d) ? d : [])).catch(() => {});
+    api.getHmUsers().then(d => setHmUsers(Array.isArray(d) ? d : [])).catch(() => {});
+    api.getInterviewPlans().then(d => setPlans(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   const set    = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
@@ -106,7 +113,7 @@ export default function Reqs() {
 
   const startEdit = (r) => {
     setEditId(r.id);
-    setEditForm({ req_id: r.req_id, title: r.title, department: r.department || '', status: r.status, hiring_manager: r.hiring_manager || '', recruiter: r.recruiter || '', script_doc_url: r.script_doc_url || '', job_description: r.job_description || '', is_public: !!r.is_public, plan_id: r.plan_id || '' });
+    setEditForm({ req_id: r.req_id, title: r.title, department: r.department || '', status: r.status, priority: r.priority || 'medium', hiring_manager: r.hiring_manager || '', recruiter: r.recruiter || '', script_doc_url: r.script_doc_url || '', job_description: r.job_description || '', is_public: !!r.is_public, plan_id: r.plan_id || '' });
   };
 
   const copyLink = (r) => {
@@ -166,6 +173,7 @@ export default function Reqs() {
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Req ID</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Title</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Department</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Priority</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Candidates</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Job Page</th>
@@ -243,6 +251,19 @@ export default function Reqs() {
                               <option value="closed">Closed</option>
                             </select>
                           </div>
+                          <div>
+                            <label className="block text-xs text-slate-500 mb-1">Priority</label>
+                            <select
+                              value={editForm.priority || 'medium'}
+                              onChange={setEdit('priority')}
+                              className="border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="critical">P1 · Critical</option>
+                              <option value="high">P2 · High</option>
+                              <option value="medium">P3 · Medium</option>
+                              <option value="low">P4 · Low</option>
+                            </select>
+                          </div>
                           <div className="flex-1 min-w-48">
                             <label className="block text-xs text-slate-500 mb-1">Scorecard</label>
                             <input
@@ -311,6 +332,16 @@ export default function Reqs() {
                         <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{r.req_id}</td>
                         <td className="px-4 py-3 font-medium text-slate-800">{r.title}</td>
                         <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{r.department || <span className="text-slate-300">—</span>}</td>
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const p = PRIORITY_CFG[r.priority] || PRIORITY_CFG.medium;
+                            return (
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${p.badge}`}>
+                                {p.label}
+                              </span>
+                            );
+                          })()}
+                        </td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[r.status]}`}>
                             {STATUS_LABELS[r.status]}
@@ -566,6 +597,19 @@ export default function Reqs() {
               <option value="open">Open</option>
               <option value="on_hold">On Hold</option>
               <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Priority</label>
+            <select
+              value={form.priority}
+              onChange={set('priority')}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="critical">P1 · Critical</option>
+              <option value="high">P2 · High</option>
+              <option value="medium">P3 · Medium</option>
+              <option value="low">P4 · Low</option>
             </select>
           </div>
           <button
