@@ -16,6 +16,7 @@ import HMLogin        from './pages/HMLogin';
 import Schedule       from './pages/Schedule';
 import JobPosting     from './pages/JobPosting';
 import InterviewPlans from './pages/InterviewPlans';
+import PipelineHealth, { computeNavHealth, NAV_DOT_COLORS } from './pages/PipelineHealth';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -132,6 +133,50 @@ function NotificationBell() {
   );
 }
 
+/* ── Pipeline health nav link (with colored dot) ─────────────── */
+function HealthNavLink() {
+  const [health, setHealth] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [cands, stgs] = await Promise.all([
+          fetch('/api/candidates').then(r => r.json()),
+          fetch('/api/stages').then(r => r.json()),
+        ]);
+        if (Array.isArray(cands) && Array.isArray(stgs)) {
+          setHealth(computeNavHealth(cands, stgs));
+        }
+      } catch { /* silently ignore */ }
+    }
+    load();
+    const id = setInterval(load, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <NavLink to="/health" className={({ isActive }) =>
+      `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+        isActive ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+      }`
+    }>
+      {({ isActive }) => (
+        <>
+          <span>❤️</span>
+          <span>Pipeline Health</span>
+          {health && (
+            <span
+              className={`ml-auto w-2.5 h-2.5 rounded-full shrink-0 ${
+                isActive ? 'bg-white opacity-60' : NAV_DOT_COLORS[health]
+              }`}
+            />
+          )}
+        </>
+      )}
+    </NavLink>
+  );
+}
+
 /* ── Nav link style ──────────────────────────────────────────── */
 const navItem = ({ isActive }) =>
   `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -170,6 +215,7 @@ function AppShell() {
           <NavLink to="/plans"          className={navItem}>🗂️ Interview Plans</NavLink>
           <NavLink to="/stats"          className={navItem}>📈 Stats</NavLink>
           <NavLink to="/pokedex"        className={navItem}>🔴 Pokédex</NavLink>
+          <HealthNavLink />
           <NavLink to="/settings"       className={navItem}>⚙️ Settings</NavLink>
           <div className="pt-1">
             <NotificationBell />
@@ -202,6 +248,7 @@ function AppShell() {
           <Route path="/plans"      element={<InterviewPlans />}  />
           <Route path="/stats"      element={<Stats />}           />
           <Route path="/pokedex"    element={<Pokedex />}         />
+          <Route path="/health"     element={<PipelineHealth />}  />
           <Route path="/settings"   element={<Settings />}        />
           <Route path="*"           element={<Navigate to="/" replace />} />
         </Routes>
