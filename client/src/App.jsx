@@ -140,12 +140,13 @@ function HealthNavLink() {
   useEffect(() => {
     async function load() {
       try {
-        const [cands, stgs] = await Promise.all([
+        const [cands, stgs, reqs] = await Promise.all([
           fetch('/api/candidates').then(r => r.json()),
           fetch('/api/stages').then(r => r.json()),
+          fetch('/api/reqs').then(r => r.json()),
         ]);
         if (Array.isArray(cands) && Array.isArray(stgs)) {
-          setHealth(computeNavHealth(cands, stgs));
+          setHealth(computeNavHealth(cands, stgs, reqs));
         }
       } catch { /* silently ignore */ }
     }
