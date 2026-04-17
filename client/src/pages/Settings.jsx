@@ -682,6 +682,7 @@ export default function Settings() {
                         >
                           <option value="recruiter">Recruiter</option>
                           <option value="senior_recruiter">Senior Recruiter</option>
+                          <option value="coordinator">Coordinator</option>
                           <option value="admin">Admin</option>
                         </select>
                       ) : (
@@ -690,9 +691,11 @@ export default function Settings() {
                             ? 'bg-purple-100 text-purple-700'
                             : u.role === 'senior_recruiter'
                             ? 'bg-teal-100 text-teal-700'
+                            : u.role === 'coordinator'
+                            ? 'bg-orange-100 text-orange-700'
                             : 'bg-blue-100 text-blue-700'
                         }`}>
-                          {u.role === 'senior_recruiter' ? 'Senior Recruiter' : u.role}
+                          {u.role === 'senior_recruiter' ? 'Senior Recruiter' : u.role === 'coordinator' ? 'Coordinator' : u.role}
                         </span>
                       )}
                       {me?.email === u.email && (
@@ -773,6 +776,7 @@ export default function Settings() {
                 >
                   <option value="recruiter">Recruiter</option>
                   <option value="senior_recruiter">Senior Recruiter</option>
+                  <option value="coordinator">Coordinator</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

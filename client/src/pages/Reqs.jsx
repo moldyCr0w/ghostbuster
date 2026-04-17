@@ -170,7 +170,6 @@ export default function Reqs() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Req ID</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Title</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide whitespace-nowrap">Department</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Priority</th>
@@ -186,7 +185,7 @@ export default function Reqs() {
                 <tr className="hover:bg-slate-50">
                     {editId === r.id ? (
                       /* ── edit row ── */
-                      <td colSpan={6} className="px-4 py-3">
+                      <td colSpan={5} className="px-4 py-3">
                         <div className="flex flex-wrap gap-2 items-end">
                           <div>
                             <label className="block text-xs text-slate-500 mb-1">Req ID</label>
@@ -329,8 +328,10 @@ export default function Reqs() {
                     ) : (
                       /* ── display row ── */
                       <>
-                        <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 whitespace-nowrap">{r.req_id}</td>
-                        <td className="px-4 py-3 font-medium text-slate-800">{r.title}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-800">{r.title}</p>
+                          <p className="font-mono text-xs text-slate-400 mt-0.5">{r.req_id}</p>
+                        </td>
                         <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{r.department || <span className="text-slate-300">—</span>}</td>
                         <td className="px-4 py-3">
                           {(() => {
@@ -405,7 +406,7 @@ export default function Reqs() {
                   {/* WD HC Slots expansion row */}
                   {wdState(r.id).expanded && (
                     <tr>
-                      <td colSpan={6} className="px-4 pb-4 pt-0 bg-emerald-50/40">
+                      <td colSpan={7} className="px-4 pb-4 pt-0 bg-emerald-50/40">
                         <div className="border border-emerald-200 rounded-xl overflow-hidden">
                           <div className="px-4 py-2.5 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
                             <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Workday HC Slots — {r.req_id}</p>
