@@ -17,6 +17,7 @@ import Schedule       from './pages/Schedule';
 import JobPosting     from './pages/JobPosting';
 import InterviewPlans from './pages/InterviewPlans';
 import PipelineHealth, { computeNavHealth, NAV_DOT_COLORS } from './pages/PipelineHealth';
+import SchedulingDashboard from './pages/SchedulingDashboard';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -214,6 +215,7 @@ function AppShell() {
           <NavLink to="/candidates"     className={navItem}>👥 Candidates</NavLink>
           <NavLink to="/reqs"           className={navItem}>📋 Requisitions</NavLink>
           <NavLink to="/plans"          className={navItem}>🗂️ Interview Plans</NavLink>
+          <NavLink to="/scheduling"      className={navItem}>🗓️ Scheduling</NavLink>
           <NavLink to="/stats"          className={navItem}>📈 Stats</NavLink>
           <NavLink to="/pokedex"        className={navItem}>🔴 Pokédex</NavLink>
           <HealthNavLink />
@@ -249,8 +251,9 @@ function AppShell() {
           <Route path="/plans"      element={<InterviewPlans />}  />
           <Route path="/stats"      element={<Stats />}           />
           <Route path="/pokedex"    element={<Pokedex />}         />
-          <Route path="/health"     element={<PipelineHealth />}  />
-          <Route path="/settings"   element={<Settings />}        />
+          <Route path="/health"      element={<PipelineHealth />}       />
+          <Route path="/scheduling"  element={<SchedulingDashboard />} />
+          <Route path="/settings"    element={<Settings />}            />
           <Route path="*"           element={<Navigate to="/" replace />} />
         </Routes>
       </main>

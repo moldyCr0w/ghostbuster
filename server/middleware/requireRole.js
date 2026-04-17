@@ -1,4 +1,4 @@
-const ROLE_RANK = { recruiter: 1, senior_recruiter: 2, admin: 3 };
+const ROLE_RANK = { recruiter: 1, senior_recruiter: 2, coordinator: 2, admin: 3 };
 
 /**
  * Middleware factory that enforces a minimum role level.

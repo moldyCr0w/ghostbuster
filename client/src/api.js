@@ -165,4 +165,10 @@ export const api = {
   updatePlanStep:       (planId, stepId, data) => req(`/interview-plans/${planId}/steps/${stepId}`,   { method: 'PUT',    body: JSON.stringify(data) }),
   deletePlanStep:       (planId, stepId)       => req(`/interview-plans/${planId}/steps/${stepId}`,   { method: 'DELETE' }),
   reorderPlanSteps:     (planId, order)        => req(`/interview-plans/${planId}/steps/reorder`,     { method: 'PUT',    body: JSON.stringify({ order }) }),
+
+  // ── Scheduling Requests ────────────────────────────────────────
+  getSchedulingRequests:    ()          => req('/scheduling-requests'),
+  createSchedulingRequest:  (data)      => req('/scheduling-requests',       { method: 'POST',   body: JSON.stringify(data) }),
+  updateSchedulingRequest:  (id, data)  => req(`/scheduling-requests/${id}`, { method: 'PATCH',  body: JSON.stringify(data) }),
+  deleteSchedulingRequest:  (id)        => req(`/scheduling-requests/${id}`, { method: 'DELETE' }),
 };

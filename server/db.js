@@ -243,6 +243,26 @@ if (!withdrawStageExists) {
   ).run('Candidate Withdrew / Declined', maxOrder + 1);
 }
 
+// Scheduling requests (recruiter submits candidate availability → coordinator schedules)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scheduling_requests (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_id   INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+      req_id         INTEGER REFERENCES reqs(id) ON DELETE SET NULL,
+      stage_id       INTEGER REFERENCES stages(id) ON DELETE SET NULL,
+      availability   TEXT    NOT NULL DEFAULT '[]',
+      notes          TEXT,
+      status         TEXT    NOT NULL DEFAULT 'to_be_scheduled',
+      submitted_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      coordinator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      interview_date TEXT,
+      created_at     TEXT    DEFAULT (datetime('now')),
+      updated_at     TEXT    DEFAULT (datetime('now'))
+    );
+  `);
+} catch (_) {}
+
 // Settings table (key/value store)
 try {
   db.exec(`
