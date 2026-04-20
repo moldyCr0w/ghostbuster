@@ -31,6 +31,39 @@ const COL_HEADER = {
   slate:  'bg-slate-500',
 };
 
+/* ── time options (6 AM – 9:30 PM, 30-min increments) ───────── */
+const TIME_OPTIONS = (() => {
+  const opts = [];
+  for (let h = 6; h <= 21; h++) {
+    for (const m of [0, 30]) {
+      if (h === 21 && m === 30) break;
+      const hh     = String(h).padStart(2, '0');
+      const mm     = String(m).padStart(2, '0');
+      const value  = `${hh}:${mm}`;
+      const period = h < 12 ? 'AM' : 'PM';
+      const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      const label  = `${hour12}:${mm} ${period}`;
+      opts.push({ value, label });
+    }
+  }
+  return opts;
+})();
+
+function fmt12(value) {
+  if (!value) return '';
+  const opt = TIME_OPTIONS.find(o => o.value === value);
+  return opt ? opt.label : value;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  // Parse as local date to avoid UTC offset shifting the day
+  const [y, mo, d] = iso.split('-').map(Number);
+  return new Date(y, mo - 1, d).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  });
+}
+
 /* ── availability display ───────────────────────────────────── */
 function AvailabilityList({ windows }) {
   if (!windows || windows.length === 0) {
@@ -40,8 +73,10 @@ function AvailabilityList({ windows }) {
     <ul className="space-y-0.5">
       {windows.map((w, i) => (
         <li key={i} className="text-xs text-slate-600">
-          <span className="font-medium">{w.date}</span>
-          {w.start && w.end && <span className="text-slate-400"> · {w.start}–{w.end}</span>}
+          <span className="font-medium">{fmtDate(w.date) || w.date}</span>
+          {w.start && w.end && (
+            <span className="text-slate-400"> · {fmt12(w.start)} – {fmt12(w.end)}</span>
+          )}
         </li>
       ))}
     </ul>
@@ -309,49 +344,73 @@ function NewRequestModal({ onClose, onSubmit, candidates, stages, reqs }) {
 
           {/* Availability windows */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-600">Candidate Availability <span className="text-red-400">*</span></label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-slate-600">
+                Candidate Availability <span className="text-red-400">*</span>
+              </label>
               <button
                 type="button"
                 onClick={addWindow}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium"
               >
-                + Add window
+                + Add day
               </button>
             </div>
             <div className="space-y-2">
               {windows.map((w, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={w.date}
-                    onChange={e => updateWindow(i, 'date', e.target.value)}
-                    className="flex-1 text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <input
-                    type="time"
-                    value={w.start}
-                    onChange={e => updateWindow(i, 'start', e.target.value)}
-                    placeholder="Start"
-                    className="w-24 text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-slate-400 text-xs">–</span>
-                  <input
-                    type="time"
-                    value={w.end}
-                    onChange={e => updateWindow(i, 'end', e.target.value)}
-                    placeholder="End"
-                    className="w-24 text-xs border border-slate-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  {windows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeWindow(i)}
-                      className="text-slate-400 hover:text-red-500 text-sm leading-none"
+                <div key={i} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                  {/* Date row */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <input
+                        type="date"
+                        value={w.date}
+                        onChange={e => updateWindow(i, 'date', e.target.value)}
+                        className="flex-1 min-w-0 text-sm border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {w.date && (
+                        <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">
+                          {fmtDate(w.date)}
+                        </span>
+                      )}
+                    </div>
+                    {windows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeWindow(i)}
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors text-base leading-none"
+                        title="Remove this day"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Time row */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 w-8 shrink-0">From</span>
+                    <select
+                      value={w.start}
+                      onChange={e => updateWindow(i, 'start', e.target.value)}
+                      className="flex-1 text-sm border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      ×
-                    </button>
-                  )}
+                      <option value="">— Start —</option>
+                      {TIME_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <span className="text-xs text-slate-400 shrink-0">to</span>
+                    <select
+                      value={w.end}
+                      onChange={e => updateWindow(i, 'end', e.target.value)}
+                      className="flex-1 text-sm border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">— End —</option>
+                      {TIME_OPTIONS.filter(o => !w.start || o.value > w.start).map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               ))}
             </div>
