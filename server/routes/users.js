@@ -18,7 +18,7 @@ router.get('/', (_req, res) => {
 router.post('/', requireRole('admin'), (req, res) => {
   const { name, email, role } = req.body;
   if (!name || !email) return res.status(400).json({ error: 'name and email are required' });
-  const VALID = ['recruiter', 'senior_recruiter', 'admin'];
+  const VALID = ['recruiter', 'senior_recruiter', 'coordinator', 'admin'];
   const assignedRole = VALID.includes(role) ? role : 'recruiter';
   try {
     const r = db.prepare(
@@ -35,7 +35,7 @@ router.post('/', requireRole('admin'), (req, res) => {
 // PATCH /api/users/:id/role  — admin only; cannot change your own role
 router.patch('/:id/role', requireRole('admin'), (req, res) => {
   const { role } = req.body;
-  const VALID = ['recruiter', 'senior_recruiter', 'admin'];
+  const VALID = ['recruiter', 'senior_recruiter', 'coordinator', 'admin'];
   if (!VALID.includes(role)) return res.status(400).json({ error: 'Invalid role' });
   if (Number(req.params.id) === req.user.id) {
     return res.status(400).json({ error: 'You cannot change your own role' });
