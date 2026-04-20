@@ -712,10 +712,8 @@ export default function HMView() {
       type: decision,
     });
     setDrawerCandidate(null);
-    const [s, c] = await Promise.all([api.getStages(), api.getCandidates()]);
-    setStages(s);
-    setCandidates(c);
-  }, []);
+    await load();
+  }, [load]);
 
   // Still checking session — show dark splash so there's no flash of content
   if (authed === null) {
