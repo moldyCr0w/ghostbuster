@@ -44,6 +44,7 @@ export default function Reqs() {
   const [wdSlotState, setWdSlotState] = useState({});
 
   const [plans, setPlans]       = useState([]);   // interview plans
+  const [recruiterFilter, setRecruiterFilter] = useState('all');
 
   const load = useCallback(async () => {
     setReqs(await api.getReqs());
@@ -144,6 +145,13 @@ export default function Reqs() {
     );
   }
 
+  // Derive unique recruiter names from loaded reqs for the filter dropdown
+  const uniqueRecruiters = [...new Set(reqs.map(r => r.recruiter).filter(Boolean))].sort();
+
+  const filteredReqs = recruiterFilter === 'all'
+    ? reqs
+    : reqs.filter(r => r.recruiter === recruiterFilter);
+
   return (
     <div className="p-8">
       {/* Header */}
@@ -154,16 +162,38 @@ export default function Reqs() {
         </p>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <select
+          value={recruiterFilter}
+          onChange={e => setRecruiterFilter(e.target.value)}
+          className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-600"
+        >
+          <option value="all">All Recruiters / Sourcers</option>
+          {uniqueRecruiters.map(name => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+        {recruiterFilter !== 'all' && (
+          <button
+            onClick={() => setRecruiterFilter('all')}
+            className="text-xs text-slate-400 hover:text-slate-600"
+          >
+            Clear filter ✕
+          </button>
+        )}
+      </div>
+
       {/* Reqs table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-5">
         <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
           <p className="text-sm font-semibold text-slate-700">All Requisitions</p>
-          <p className="text-xs text-slate-400">{reqs.length} total</p>
+          <p className="text-xs text-slate-400">{filteredReqs.length} total</p>
         </div>
 
-        {reqs.length === 0 ? (
+        {filteredReqs.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-sm">
-            No requisitions yet — add one below.
+            {reqs.length === 0 ? 'No requisitions yet — add one below.' : 'No requisitions match the selected filter.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -180,7 +210,7 @@ export default function Reqs() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {reqs.map(r => (
+              {filteredReqs.map(r => (
                 <React.Fragment key={r.id}>
                 <tr className="hover:bg-slate-50">
                     {editId === r.id ? (
