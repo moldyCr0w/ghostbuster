@@ -301,27 +301,32 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, i
 
 /* ── Board page ──────────────────────────────────────────────────── */
 export default function Board() {
-  const [stages, setStages]         = useState([]);
-  const [candidates, setCandidates] = useState([]);
-  const [reqs, setReqs]             = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [stages, setStages]             = useState([]);
+  const [candidates, setCandidates]     = useState([]);
+  const [reqs, setReqs]                 = useState([]);
+  const [users, setUsers]               = useState([]);
+  const [loading, setLoading]           = useState(true);
   const [editingCandidate, setEditingCandidate] = useState(null);
-  const [reqFilter, setReqFilter]   = useState('');
-  const [movingId, setMovingId]     = useState(null); // optimistic: currently being moved
+  const [reqFilter, setReqFilter]       = useState('');
+  const [sourcerFilter, setSourcerFilter]   = useState('');
+  const [recruiterFilter, setRecruiterFilter] = useState('');
+  const [movingId, setMovingId]         = useState(null); // optimistic: currently being moved
 
   const location   = useLocation();
   const navigate   = useNavigate();
   const handledRef = useRef(null); // prevent double-open on re-renders
 
   const load = useCallback(async () => {
-    const [s, c, r] = await Promise.all([
+    const [s, c, r, u] = await Promise.all([
       api.getStages(),
       api.getCandidates(),
       api.getReqs(),
+      api.getUsers(),
     ]);
     setStages(s);
     setCandidates(c);
     setReqs(r);
+    setUsers(u);
     setLoading(false);
   }, []);
 
@@ -450,10 +455,16 @@ export default function Board() {
     .filter(s => !(s.is_terminal && s.is_hire))
     .sort((a, b) => a.order_index - b.order_index);
 
-  // Apply req filter
-  const visibleCandidates = reqFilter
-    ? candidates.filter(c => c.reqs?.some(r => String(r.id) === reqFilter))
-    : candidates;
+  // Lookup map: req id → req (for recruiter name)
+  const reqMap = Object.fromEntries(reqs.map(r => [r.id, r]));
+
+  // Apply filters
+  const visibleCandidates = candidates.filter(c => {
+    if (reqFilter && !c.reqs?.some(r => String(r.id) === reqFilter)) return false;
+    if (sourcerFilter && !c.reqs?.some(r => String(r.sourced_by) === sourcerFilter)) return false;
+    if (recruiterFilter && !c.reqs?.some(r => reqMap[r.id]?.recruiter === recruiterFilter)) return false;
+    return true;
+  });
 
   // Exclude hired candidates — declined ones still show on the board
   const activeCandidates = visibleCandidates.filter(c => c.stage_id !== hiredStageId);
@@ -479,6 +490,17 @@ export default function Board() {
   ).length;
 
   const openReqs = reqs.filter(r => r.status !== 'closed' && r.status !== 'filled');
+
+  // Sourcer options: users who appear as sourced_by on at least one candidate's req
+  const sourcerIds = new Set(
+    candidates.flatMap(c => (c.reqs || []).map(r => r.sourced_by).filter(Boolean))
+  );
+  const sourcerOptions = users.filter(u => sourcerIds.has(u.id));
+
+  // Recruiter options: unique recruiter names from open reqs that have one
+  const recruiterOptions = [...new Set(
+    openReqs.map(r => r.recruiter).filter(Boolean)
+  )].sort();
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -530,6 +552,68 @@ export default function Board() {
                 {reqFilter && (
                   <button
                     onClick={() => setReqFilter('')}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Sourcer filter */}
+            {sourcerOptions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Sourcer:</label>
+                <select
+                  value={sourcerFilter}
+                  onChange={e => setSourcerFilter(e.target.value)}
+                  className={`text-sm rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    sourcerFilter
+                      ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <option value="">All sourcers</option>
+                  {sourcerOptions.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+                {sourcerFilter && (
+                  <button
+                    onClick={() => setSourcerFilter('')}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Recruiter filter */}
+            {recruiterOptions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Recruiter:</label>
+                <select
+                  value={recruiterFilter}
+                  onChange={e => setRecruiterFilter(e.target.value)}
+                  className={`text-sm rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    recruiterFilter
+                      ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
+                      : 'border-slate-200 bg-white text-slate-600'
+                  }`}
+                >
+                  <option value="">All recruiters</option>
+                  {recruiterOptions.map(name => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                {recruiterFilter && (
+                  <button
+                    onClick={() => setRecruiterFilter('')}
                     className="text-xs text-slate-400 hover:text-slate-600"
                   >
                     ✕
