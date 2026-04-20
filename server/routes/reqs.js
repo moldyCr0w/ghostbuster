@@ -8,9 +8,13 @@ const requireRole = require('../middleware/requireRole');
 // GET /api/reqs  — any authenticated user can list reqs
 router.get('/', (req, res) => {
   const rows = db.prepare(`
-    SELECT r.*, COUNT(cr.candidate_id) as candidate_count
+    SELECT r.*,
+           COUNT(DISTINCT cr.candidate_id)                                       AS candidate_count,
+           COUNT(DISTINCT ws.id)                                                  AS total_hc,
+           COUNT(DISTINCT CASE WHEN ws.status = 'open' THEN ws.id END)           AS open_hc
     FROM   reqs r
     LEFT JOIN candidate_reqs cr ON cr.req_id = r.id
+    LEFT JOIN req_wd_slots   ws ON ws.req_id = r.id
     GROUP BY r.id
     ORDER BY r.req_id
   `).all();
