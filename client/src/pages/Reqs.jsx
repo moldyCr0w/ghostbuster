@@ -16,7 +16,7 @@ const PRIORITY_CFG = {
   low:      { label: 'P4 · Low',      badge: 'bg-slate-100 text-slate-500 border-slate-200'    },
 };
 
-const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', priority: 'medium', hiring_manager: '', recruiter: '', script_doc_url: '', job_description: '', is_public: false, plan_id: '' };
+const EMPTY_FORM = { req_id: '', title: '', department: '', status: 'open', priority: 'medium', hiring_manager: '', recruiter: '', script_doc_url: '', job_description: '', is_public: false, plan_id: '', initial_slot: '' };
 
 const WD_SLOT_STATUS_STYLES = {
   open:   'bg-emerald-50 text-emerald-700 border border-emerald-200',
@@ -101,6 +101,10 @@ export default function Reqs() {
     setError('');
     const res = await api.createReq(form);
     if (res.error) { setError(res.error); return; }
+    // Auto-create the required first slot
+    if (form.initial_slot.trim()) {
+      await api.addWdSlot(res.id, { wd_req_id: form.initial_slot.trim() });
+    }
     setForm(EMPTY_FORM);
     load();
   };
@@ -549,6 +553,16 @@ export default function Reqs() {
               onChange={set('req_id')}
               placeholder="JR-101"
               className="w-28 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">First Slot # *</label>
+            <input
+              required
+              value={form.initial_slot}
+              onChange={set('initial_slot')}
+              placeholder="JR101224"
+              className="w-28 border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex-1 min-w-48">
