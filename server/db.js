@@ -126,6 +126,7 @@ db.exec(`
   'pending_reason         TEXT',
   'card_sub_status        TEXT',
   'stage_event_date       TEXT',
+  'dispositioned_at       TEXT',
 ].forEach(col => {
   try { db.exec(`ALTER TABLE candidates ADD COLUMN ${col}`); } catch (_) {}
 });

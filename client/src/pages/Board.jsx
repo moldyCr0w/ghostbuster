@@ -5,10 +5,12 @@ import { localToday } from '../utils/dates';
 import CandidateModal from '../components/CandidateModal';
 
 /* ── Candidate card ──────────────────────────────────────────────── */
-function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCardStatusChange, onConfirmScheduled }) {
+function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCardStatusChange, onConfirmScheduled, onDisposition }) {
   const isOverdue      = candidate.next_step_due && candidate.next_step_due < today;
   const isHmReview     = !!candidate.is_hm_review;
   const isPending      = !!candidate.pending_next_stage_id;
+  const isRejected     = !!candidate.is_terminal && !candidate.is_hire;
+  const needsDisposition = isRejected && !candidate.dispositioned_at;
   // schedule_pending is a fallback amber state for non-eligible stages with requires_scheduling
   const isSchedPending = !isEligible && !!candidate.schedule_pending;
   const subStatus      = isEligible && !isPending ? candidate.card_sub_status : null;
@@ -37,12 +39,13 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
       onDragStart={(isPending || isSchedPending) ? undefined : (e => onDragStart(e, candidate.id))}
       onClick={() => onEdit(candidate)}
       className={`rounded-lg border p-3 cursor-pointer hover:shadow-md active:opacity-70 transition-shadow select-none ${
-        isPending      ? 'bg-teal-50 border-teal-400 ring-1 ring-teal-300' :
-        isTaAction     ? 'bg-green-50 border-green-400' :
-        isChecking     ? 'bg-yellow-50 border-yellow-400' :
-        isSchedPending ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-300' :
-        isOverdue      ? 'bg-red-50 border-red-300' :
-        isHmReview     ? 'bg-orange-50 border-orange-300' :
+        isPending         ? 'bg-teal-50 border-teal-400 ring-1 ring-teal-300' :
+        isTaAction        ? 'bg-green-50 border-green-400' :
+        isChecking        ? 'bg-yellow-50 border-yellow-400' :
+        isSchedPending    ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-300' :
+        needsDisposition  ? 'bg-red-50 border-red-400 ring-1 ring-red-300' :
+        isOverdue         ? 'bg-red-50 border-red-300' :
+        isHmReview        ? 'bg-orange-50 border-orange-300' :
         'bg-white border-slate-200'
       }`}
     >
@@ -157,6 +160,23 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
         </div>
       )}
 
+      {/* Disposition button — shown on all Rejected/Closed cards until actioned */}
+      {needsDisposition && onDisposition && (
+        <button
+          onClick={e => { e.stopPropagation(); onDisposition(candidate.id); }}
+          className="mt-2 w-full px-2 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors"
+        >
+          Dispositioned in WD?
+        </button>
+      )}
+
+      {/* Post-disposition archive countdown */}
+      {isRejected && candidate.dispositioned_at && (
+        <p className="text-xs text-slate-400 font-medium mt-1.5">
+          ✓ Dispositioned{candidate.next_step_due ? ` · archives ${candidate.next_step_due}` : ''}
+        </p>
+      )}
+
       {/* Resume indicator */}
       {candidate.resume_path && (
         <span className="inline-block mt-1.5 text-xs text-slate-400">📄</span>
@@ -166,7 +186,7 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
 }
 
 /* ── Kanban column ───────────────────────────────────────────────── */
-function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, isEligible, onCardStatusChange, onConfirmScheduled }) {
+function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, isEligible, onCardStatusChange, onConfirmScheduled, onDisposition }) {
   const [dragOver, setDragOver] = useState(false);
 
   const handleDragOver = e => {
@@ -264,6 +284,7 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, i
                 onDragStart={onDragStart}
                 isEligible={isEligible}
                 onCardStatusChange={onCardStatusChange}
+                onDisposition={onDisposition}
               />
             ))}
             {activeCandidates.length > 0 && (
@@ -287,6 +308,7 @@ function KanbanColumn({ stage, candidates, today, onEdit, onDragStart, onDrop, i
             isEligible={isEligible}
             onCardStatusChange={onCardStatusChange}
             onConfirmScheduled={onConfirmScheduled}
+            onDisposition={onDisposition}
           />
         ))}
         {candidates.length === 0 && (
@@ -346,6 +368,13 @@ export default function Board() {
       if (c && !c.error) setEditingCandidate(c);
     });
   }, [location.state?.openCandidateId, navigate]);
+
+  /* ── Disposition (Rejected/Closed → mark as dispositioned in WD) ── */
+  const handleDisposition = useCallback(async (id) => {
+    await api.dispositionCandidate(id);
+    const fresh = await api.getCandidates();
+    setCandidates(fresh);
+  }, []);
 
   /* ── Confirm scheduled (requires_scheduling stages fallback) ── */
   const handleConfirmScheduled = useCallback(async (id) => {
@@ -466,8 +495,13 @@ export default function Board() {
     return true;
   });
 
-  // Exclude hired candidates — declined ones still show on the board
-  const activeCandidates = visibleCandidates.filter(c => c.stage_id !== hiredStageId);
+  // Exclude hired candidates, and archived rejected candidates
+  // (dispositioned + their 5-day post-disposition window has expired)
+  const activeCandidates = visibleCandidates.filter(c => {
+    if (c.stage_id === hiredStageId) return false;
+    if (c.is_terminal && !c.is_hire && c.dispositioned_at && c.next_step_due && c.next_step_due < today) return false;
+    return true;
+  });
 
   // Build stage → candidate list
   // Candidates with a pending_next_stage_id appear in the TARGET column (flagged _isPending=true)
@@ -640,6 +674,7 @@ export default function Board() {
               isEligible={eligibleStageIds.has(stage.id)}
               onCardStatusChange={handleCardStatusChange}
               onConfirmScheduled={handleConfirmScheduled}
+              onDisposition={handleDisposition}
             />
           ))}
 
