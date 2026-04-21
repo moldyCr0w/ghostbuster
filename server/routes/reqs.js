@@ -23,15 +23,16 @@ router.get('/', (req, res) => {
 
 // POST /api/reqs  — senior_recruiter+
 router.post('/', requireAuth, requireRole('senior_recruiter'), (req, res) => {
-  const { req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description, plan_id, priority } = req.body;
-  if (!req_id || !title) return res.status(400).json({ error: 'req_id and title are required' });
+  const { title, department, status, hiring_manager, recruiter, script_doc_url, job_description, plan_id, priority } = req.body;
+  if (!title) return res.status(400).json({ error: 'title is required' });
+  // Auto-generate an internal req_id — never shown in the UI
+  const req_id = crypto.randomBytes(4).toString('hex').toUpperCase();
   try {
     const r = db.prepare(
       'INSERT INTO reqs (req_id, title, department, status, hiring_manager, recruiter, script_doc_url, job_description, plan_id, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(req_id.trim(), title.trim(), department || null, status || 'open', hiring_manager || null, recruiter || null, script_doc_url || null, job_description || null, plan_id ? Number(plan_id) : null, priority || 'medium');
+    ).run(req_id, title.trim(), department || null, status || 'open', hiring_manager || null, recruiter || null, script_doc_url || null, job_description || null, plan_id ? Number(plan_id) : null, priority || 'medium');
     res.status(201).json({ id: r.lastInsertRowid });
   } catch (err) {
-    if (err.message.includes('UNIQUE')) return res.status(400).json({ error: `Req ID "${req_id}" already exists` });
     throw err;
   }
 });
