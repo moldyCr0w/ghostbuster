@@ -302,6 +302,32 @@ router.patch('/:id/card-status', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// PATCH /api/candidates/:id/disposition — mark candidate as dispositioned in Workday
+// Stamps dispositioned_at and starts a fresh 5-business-day archive window.
+router.patch('/:id/disposition', requireAuth, (req, res) => {
+  const row = db.prepare(`
+    SELECT c.id, s.is_terminal, s.is_hire
+    FROM candidates c
+    JOIN stages s ON s.id = c.stage_id
+    WHERE c.id = ?
+  `).get(req.params.id);
+
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (!row.is_terminal || row.is_hire) {
+    return res.status(400).json({ error: 'Candidate is not in a terminal (rejected/closed) stage' });
+  }
+
+  db.prepare(`
+    UPDATE candidates
+    SET dispositioned_at = datetime('now'),
+        next_step_due    = ?,
+        updated_at       = datetime('now')
+    WHERE id = ?
+  `).run(bizDaysFromNow(5), req.params.id);
+
+  res.json({ success: true });
+});
+
 // GET /api/candidates/:id
 router.get('/:id', (req, res) => {
   const row = db.prepare(WITH_STAGE + ' WHERE c.id = ?').get(req.params.id);
@@ -388,12 +414,14 @@ router.put('/:id', requireAuth, (req, res) => {
 
   // Check whether the new stage is a "hire" stage
   let isHire             = false;
+  let isTerminal         = false;
   let hireReqId          = null;
   let requiresScheduling = false;
   let isEligible         = false; // eligible for card_sub_status (post-HM-review, non-terminal, non-hire)
   if (stageChanged) {
     const newStage     = db.prepare('SELECT is_hire, is_terminal, is_hm_review, requires_scheduling FROM stages WHERE id=?').get(stage_id);
     isHire             = !!newStage?.is_hire;
+    isTerminal         = !!newStage?.is_terminal;
     requiresScheduling = !!newStage?.requires_scheduling;
     hireReqId          = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
     isEligible         = !newStage?.is_hm_review && !newStage?.is_terminal && !newStage?.is_hire;
@@ -423,6 +451,11 @@ router.put('/:id', requireAuth, (req, res) => {
       if (isHire) {
         sql += `, next_step_due=NULL, hired_for_req_id=?`;
         args.push(hireReqId);
+      } else if (isTerminal) {
+        // Preserve the existing SLA clock — don't restart it on rejection.
+        // COALESCE sets a fresh 5-day window only if the value was already NULL.
+        sql += `, next_step_due=COALESCE(next_step_due, ?), hired_for_req_id=NULL, dispositioned_at=NULL`;
+        args.push(bizDaysFromNow(5));
       } else {
         sql += `, next_step_due=?, hired_for_req_id=NULL`;
         args.push(bizDaysFromNow(5));
@@ -557,15 +590,18 @@ router.patch('/:id/hm-decision', requireHmAuth, (req, res) => {
       WHERE id = ?
     `).run(targetStage.id, bizDaysFromNow(5), req.params.id);
   } else {
-    // Decline: immediately move to rejected/closed
+    // Decline: immediately move to rejected/closed.
+    // Preserve the existing SLA clock; only set a fresh 5-day window if it was NULL.
     db.prepare(`
       UPDATE candidates
       SET stage_id = ?, stage_entered_at = datetime('now'),
-          sla_reset_at = NULL, next_step_due = NULL,
+          sla_reset_at = NULL,
+          next_step_due = COALESCE(next_step_due, ?),
           pending_next_stage_id = NULL, pending_reason = NULL,
+          dispositioned_at = NULL,
           updated_at = datetime('now')
       WHERE id = ?
-    `).run(targetStage.id, req.params.id);
+    `).run(targetStage.id, bizDaysFromNow(5), req.params.id);
   }
 
   // Log a notification for the sourcer (recruiter who submitted the candidate)
