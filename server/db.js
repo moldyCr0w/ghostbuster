@@ -190,6 +190,24 @@ try {
   }
 } catch (e) { console.error('[db] hm_forward backfill error:', e.message); }
 
+// Back-fill first WD slot from req_id for existing reqs that predate the
+// "slots required at creation" change and have no slots yet.
+try {
+  const result = db.prepare(`
+    INSERT INTO req_wd_slots (req_id, wd_req_id)
+    SELECT r.id, r.req_id
+    FROM   reqs r
+    WHERE  r.req_id IS NOT NULL
+      AND  r.req_id != ''
+      AND  NOT EXISTS (
+             SELECT 1 FROM req_wd_slots ws WHERE ws.req_id = r.id
+           )
+  `).run();
+  if (result.changes > 0) {
+    console.log(`[db] Backfilled ${result.changes} first WD slot(s) from existing req IDs.`);
+  }
+} catch (e) { console.error('[db] req slot backfill error:', e.message); }
+
 // Seed default stages (only on fresh database)
 const stageCount = db.prepare('SELECT COUNT(*) as c FROM stages').get().c;
 if (stageCount === 0) {

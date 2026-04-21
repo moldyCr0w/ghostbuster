@@ -127,7 +127,7 @@ router.get('/:id/wd-slots', (req, res) => {
 });
 
 // POST /api/reqs/:id/wd-slots  — add a new HC slot (senior_recruiter+)
-router.post('/:id/wd-slots', requireRole('senior_recruiter'), (req, res) => {
+router.post('/:id/wd-slots', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { wd_req_id, label } = req.body || {};
   if (!wd_req_id?.trim()) return res.status(400).json({ error: 'wd_req_id is required' });
 
@@ -140,7 +140,7 @@ router.post('/:id/wd-slots', requireRole('senior_recruiter'), (req, res) => {
 });
 
 // PATCH /api/reqs/:id/wd-slots/:slotId  — update label or status (senior_recruiter+)
-router.patch('/:id/wd-slots/:slotId', requireRole('senior_recruiter'), (req, res) => {
+router.patch('/:id/wd-slots/:slotId', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const { label, status } = req.body || {};
   const allowed = ['open', 'pushed', 'filled'];
   if (status && !allowed.includes(status)) {
@@ -156,7 +156,7 @@ router.patch('/:id/wd-slots/:slotId', requireRole('senior_recruiter'), (req, res
 });
 
 // DELETE /api/reqs/:id/wd-slots/:slotId  — remove a slot (senior_recruiter+, only if open)
-router.delete('/:id/wd-slots/:slotId', requireRole('senior_recruiter'), (req, res) => {
+router.delete('/:id/wd-slots/:slotId', requireAuth, requireRole('senior_recruiter'), (req, res) => {
   const slot = db.prepare('SELECT id, status FROM req_wd_slots WHERE id = ? AND req_id = ?')
     .get(req.params.slotId, req.params.id);
   if (!slot) return res.status(404).json({ error: 'Slot not found' });
