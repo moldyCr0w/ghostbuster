@@ -17,6 +17,8 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
   const isTaAction     = subStatus === 'ta_action';
   const isChecking     = subStatus === 'check_scheduled';
   const isScheduled    = isEligible && !isPending && !subStatus;
+  // Interview happened (stage_event_date is yesterday or earlier) — WD feedback now due
+  const needsFeedback  = isScheduled && !!candidate.stage_event_date && candidate.stage_event_date < today;
 
   const [localDate, setLocalDate] = React.useState(candidate.stage_event_date || '');
   React.useEffect(() => {
@@ -43,6 +45,7 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
         isTaAction        ? 'bg-green-50 border-green-400' :
         isChecking        ? 'bg-yellow-50 border-yellow-400' :
         isSchedPending    ? 'bg-amber-50 border-amber-400 ring-1 ring-amber-300' :
+        needsFeedback     ? 'bg-red-50 border-red-500 ring-1 ring-red-400' :
         needsDisposition  ? 'bg-red-50 border-red-400 ring-1 ring-red-300' :
         isOverdue         ? 'bg-red-50 border-red-300' :
         isHmReview        ? 'bg-orange-50 border-orange-300' :
@@ -70,6 +73,14 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
         <div className="flex items-center gap-1 mb-2 px-1.5 py-0.5 bg-yellow-100 rounded text-yellow-700 text-xs font-semibold">
           <span>⏰</span>
           <span>Awaiting Confirmation</span>
+        </div>
+      )}
+
+      {/* Feedback needed banner — interview was yesterday or earlier */}
+      {needsFeedback && (
+        <div className="flex items-center gap-1 mb-2 px-1.5 py-0.5 bg-red-100 rounded text-red-700 text-xs font-semibold">
+          <span>🔴</span>
+          <span>HM / Panelist Action Needed</span>
         </div>
       )}
 
