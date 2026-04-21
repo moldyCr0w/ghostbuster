@@ -54,7 +54,22 @@ app.listen(PORT, () => {
   // Run HM 24-hour reminder check on startup and then every hour
   const { sendHmReminders } = require('./reminders');
   sendHmReminders().catch(err => console.error('[reminders] Startup check failed:', err.message));
+
+  // Run daily interview report check on startup and then every hour.
+  // The report itself sends only once per day (after 08:00 server time).
+  const { sendDailyInterviewReport } = require('./reports');
+  function checkDailyReport() {
+    const hour = new Date().getHours();
+    if (hour >= 8) {
+      sendDailyInterviewReport().catch(err =>
+        console.error('[reports] Daily report check failed:', err.message)
+      );
+    }
+  }
+  checkDailyReport();
+
   setInterval(() => {
     sendHmReminders().catch(err => console.error('[reminders] Hourly check failed:', err.message));
+    checkDailyReport();
   }, 60 * 60 * 1000); // every hour
 });
