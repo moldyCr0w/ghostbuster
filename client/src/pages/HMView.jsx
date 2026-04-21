@@ -87,9 +87,6 @@ function HMActionCard({ candidate, req, onDecision, onViewDetails }) {
       {/* Req badge */}
       {req && (
         <div className="flex items-center gap-2 mb-3">
-          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded font-mono">
-            {req.req_id}
-          </span>
           <span className="text-xs text-slate-500 truncate">{req.title}</span>
         </div>
       )}
@@ -188,8 +185,8 @@ function HMKanbanCard({ candidate, stage, onDecision, onClick }) {
       {candidate.reqs?.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1.5">
           {candidate.reqs.map(r => (
-            <span key={r.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded font-mono">
-              {r.req_id}
+            <span key={r.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-xs rounded">
+              {r.title}
             </span>
           ))}
         </div>
@@ -346,7 +343,7 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
         const scored = Array.isArray(data) ? data.filter(d => d.score != null) : [];
         if (scored.length > 0) {
           setScorecard(scored);
-          setScorecardReqTitle(r.title || r.req_id || '');
+          setScorecardReqTitle(r.title || '');
           return;
         }
       }
@@ -471,8 +468,8 @@ function HMCandidateDrawer({ candidate, stages, onClose, onDecision }) {
               <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">Requisitions</p>
               <div className="flex flex-wrap gap-2">
                 {candidate.reqs.map(r => (
-                  <span key={r.id} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs rounded-lg font-mono">
-                    {r.req_id}{r.title ? ` · ${r.title}` : ''}
+                  <span key={r.id} className="px-2.5 py-1 bg-slate-100 text-slate-600 text-xs rounded-lg">
+                    {r.title}
                   </span>
                 ))}
               </div>
@@ -977,7 +974,7 @@ export default function HMView() {
                         : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    {r.req_id} &middot; {r.title}
+                    {r.title}
                     <span className="ml-1.5 opacity-60">({count})</span>
                     {hasPending && (
                       <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-400 rounded-full border-2 border-slate-50" />

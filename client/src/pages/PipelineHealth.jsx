@@ -132,11 +132,6 @@ function ReqHealthCard({ req, candidates, stages, hmStage }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-900 truncate">{req.title}</h3>
-              {req.req_id && (
-                <span className="text-xs font-mono text-slate-500 bg-white border border-slate-200 px-1.5 py-0.5 rounded shrink-0">
-                  {req.req_id}
-                </span>
-              )}
               {(() => {
                 const p = PRIORITY_CFG[req.priority] || PRIORITY_CFG.medium;
                 return (

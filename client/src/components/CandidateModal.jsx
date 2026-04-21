@@ -375,7 +375,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                   <option value="">— Select req to close as Filled —</option>
                   {linkedReqs.map(r => (
                     <option key={r.id} value={r.id}>
-                      {r.req_id} · {r.title}
+                      {r.title}
                     </option>
                   ))}
                 </select>
@@ -527,7 +527,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                         className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         {scorecardReqs.map(r => (
-                          <option key={r.id} value={r.id}>{r.req_id} · {r.title}</option>
+                          <option key={r.id} value={r.id}>{r.title}</option>
                         ))}
                       </select>
                       {activeReq?.script_doc_url && (
@@ -542,8 +542,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
                 {scorecardReqs.length === 1 && (
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-slate-500">
-                      <span className="font-mono font-semibold">{scorecardReqs[0].req_id}</span>
-                      {' · '}{scorecardReqs[0].title}
+                      {scorecardReqs[0].title}
                     </p>
                     {scorecardReqs[0].script_doc_url && (
                       <a href={scorecardReqs[0].script_doc_url} target="_blank" rel="noopener noreferrer"
@@ -901,7 +900,6 @@ function ReqCheckbox({ req, checked, onToggle, dimmed }) {
         onChange={onToggle}
         className="rounded border-slate-300 text-blue-600"
       />
-      <span className="font-mono text-xs text-slate-500 w-16 shrink-0">{req.req_id}</span>
       <span className="flex-1 text-sm text-slate-800">{req.title}</span>
       {req.department && <span className="text-xs text-slate-400">{req.department}</span>}
       <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${BADGE[req.status] || BADGE.closed}`}>
