@@ -435,7 +435,7 @@ export default function Reqs() {
                       <td colSpan={7} className="px-4 pb-4 pt-0 bg-emerald-50/40">
                         <div className="border border-emerald-200 rounded-xl overflow-hidden">
                           <div className="px-4 py-2.5 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
-                            <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Workday HC Slots — {r.req_id}</p>
+                            <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Workday HC Slots</p>
                             <p className="text-xs text-emerald-600">{wdState(r.id).slots.length} slot{wdState(r.id).slots.length !== 1 ? 's' : ''}</p>
                           </div>
 
