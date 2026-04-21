@@ -88,7 +88,7 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
               key={r.id}
               className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-xs rounded font-mono"
             >
-              {r.req_id}
+              {r.title}
             </span>
           ))}
         </div>
@@ -545,7 +545,7 @@ export default function Board() {
                   <option value="">All candidates</option>
                   {openReqs.map(r => (
                     <option key={r.id} value={r.id}>
-                      {r.req_id} · {r.title}{r.total_hc > 0 ? ` (${r.open_hc}/${r.total_hc} HC open)` : ''}
+                      {r.title}{r.total_hc > 0 ? ` (${r.open_hc}/${r.total_hc} HC open)` : ''}
                     </option>
                   ))}
                 </select>

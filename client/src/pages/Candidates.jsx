@@ -41,7 +41,7 @@ export default function Candidates() {
     new Map(
       candidates.flatMap(c => c.reqs || []).map(r => [r.id, r])
     ).values()
-  ).sort((a, b) => (a.req_id || '').localeCompare(b.req_id || ''));
+  ).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
 
   const uniqueSourcerIds = [...new Set(
     candidates.flatMap(c => (c.reqs || []).map(r => r.sourced_by)).filter(Boolean)
@@ -142,7 +142,7 @@ export default function Candidates() {
         >
           <option value="all">All Requisitions</option>
           {uniqueReqs.map(r => (
-            <option key={r.id} value={r.id}>{r.req_id}{r.title ? ` · ${r.title}` : ''}</option>
+            <option key={r.id} value={r.id}>{r.title}</option>
           ))}
         </select>
         <select
@@ -271,8 +271,8 @@ export default function Candidates() {
                     <div className="flex flex-wrap gap-1">
                       {c.reqs && c.reqs.length > 0
                         ? c.reqs.map(r => (
-                            <span key={r.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-mono whitespace-nowrap">
-                              {r.req_id}
+                            <span key={r.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs whitespace-nowrap">
+                              {r.title}
                             </span>
                           ))
                         : <span className="text-slate-300 text-xs">—</span>

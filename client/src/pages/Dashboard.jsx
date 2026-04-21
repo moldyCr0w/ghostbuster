@@ -74,9 +74,9 @@ function CandidateCard({ c, onEdit, onAcknowledge }) {
             {c.reqs && c.reqs.length > 0 && c.reqs.map(r => (
               <span
                 key={r.id}
-                className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs font-mono"
+                className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded text-xs"
               >
-                {r.req_id}
+                {r.title}
               </span>
             ))}
           </div>

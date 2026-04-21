@@ -337,7 +337,7 @@ function NewRequestModal({ onClose, onSubmit, candidates, stages, reqs }) {
             >
               <option value="">— Select req —</option>
               {reqs.filter(r => r.status === 'open').map(r => (
-                <option key={r.id} value={r.id}>{r.req_id} · {r.title}</option>
+                <option key={r.id} value={r.id}>{r.title}</option>
               ))}
             </select>
           </div>
