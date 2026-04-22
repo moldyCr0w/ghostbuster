@@ -23,9 +23,20 @@ function escHtml(str) {
 }
 
 /* ── Main export ─────────────────────────────────────────────────────── */
+// Returns YYYY-MM-DD for a given Date object in America/New_York.
+// Railway's OS clock is UTC — using toISOString() would give the wrong date
+// after 8 pm Eastern. The Intl API handles DST automatically.
+function easternDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'day').value}`;
+}
+
 async function sendDailyInterviewReport() {
-  // Guard: only send once per calendar day
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // Guard: only send once per calendar day (Eastern time)
+  const today = easternDateStr();
   const lastSent = db.prepare(
     "SELECT value FROM settings WHERE key = 'daily_report_last_sent'"
   ).get();
@@ -36,10 +47,8 @@ async function sendDailyInterviewReport() {
     "INSERT OR REPLACE INTO settings (key, value) VALUES ('daily_report_last_sent', ?)"
   ).run(today);
 
-  // Yesterday's date string (YYYY-MM-DD) matching stage_event_date format
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  // Yesterday in Eastern time — subtract 24 h then re-derive the Eastern date
+  const yesterdayStr = easternDateStr(new Date(Date.now() - 864e5));
 
   // Find candidates whose interview date was yesterday.
   // GROUP_CONCAT aggregates all linked req titles into a comma-separated string.
@@ -66,11 +75,11 @@ async function sendDailyInterviewReport() {
   }
 
   const coordinators = db.prepare(
-    "SELECT name, email FROM users WHERE role = 'coordinator' OR role = 'admin'"
+    'SELECT name, email FROM users'
   ).all();
 
   if (coordinators.length === 0) {
-    console.log('[reports] No coordinators found — skipping daily report email');
+    console.log('[reports] No users found — skipping daily report email');
     return;
   }
 
