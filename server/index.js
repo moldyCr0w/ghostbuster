@@ -60,7 +60,7 @@ app.listen(PORT, () => {
   const { sendDailyInterviewReport } = require('./reports');
   function checkDailyReport() {
     const hour = new Date().getHours();
-    if (hour >= 8) {
+    if (hour >= 9) {
       sendDailyInterviewReport().catch(err =>
         console.error('[reports] Daily report check failed:', err.message)
       );

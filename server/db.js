@@ -127,6 +127,7 @@ db.exec(`
   'card_sub_status        TEXT',
   'stage_event_date       TEXT',
   'dispositioned_at       TEXT',
+  'hired_slot_id          INTEGER',
 ].forEach(col => {
   try { db.exec(`ALTER TABLE candidates ADD COLUMN ${col}`); } catch (_) {}
 });

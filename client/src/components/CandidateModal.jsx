@@ -28,10 +28,12 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     wd_url:           '',
     notes:            '',
     hired_for_req_id: '',
+    hired_slot_id:    '',
     contact_date:     todayStr(),
     sourced_by:       '',
   });
   const [reqs, setReqs]               = useState([]);
+  const [hireSlots, setHireSlots]     = useState({});  // { [reqId]: [slot, ...] }
   const [selectedIds, setSelectedIds] = useState([]);
   const [allUsers, setAllUsers]       = useState([]);  // for sourcer dropdown
   const [resumeFile, setResumeFile]   = useState(null);   // new file chosen by user
@@ -75,6 +77,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
         wd_url:           candidate.wd_url           ?? '',
         notes:            candidate.notes            ?? '',
         hired_for_req_id: candidate.hired_for_req_id ?? '',
+        hired_slot_id:    candidate.hired_slot_id    ?? '',
         sourced_by:       existingSourcer,
       });
       setSelectedIds((candidate.reqs || []).map(r => r.id));
@@ -111,6 +114,14 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       loadScorecard(selectedIds[0]);
     }
   }, [candidate, selectedIds.length]); // eslint-disable-line
+
+  // Load open WD HC slots for all linked reqs whenever the hire stage is active
+  useEffect(() => {
+    if (!isHireStage || linkedReqs.length === 0) { setHireSlots({}); return; }
+    Promise.all(
+      linkedReqs.map(r => api.getWdSlots(r.id).then(slots => [r.id, slots]).catch(() => [r.id, []]))
+    ).then(entries => setHireSlots(Object.fromEntries(entries)));
+  }, [isHireStage, selectedIds.join(',')]); // eslint-disable-line
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
 
@@ -226,6 +237,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
       ...form,
       stage_id:            Number(form.stage_id),
       hired_for_req_id:    isHireStage && form.hired_for_req_id ? Number(form.hired_for_req_id) : null,
+      hired_slot_id:       isHireStage && form.hired_slot_id    ? Number(form.hired_slot_id)    : null,
       req_ids:             selectedIds,
       sourced_by:          form.sourced_by ? Number(form.sourced_by) : null,
       _resumeFile:         resumeFile,
@@ -357,34 +369,70 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
           </div>
 
           {/* ── Hire section — only shown when stage is_hire=1 ── */}
-          {isHireStage && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 space-y-2">
-              <p className="text-xs font-semibold text-green-800 flex items-center gap-1.5">
-                🎉 Hire — Which req does this fill?
-              </p>
-              {linkedReqs.length === 0 ? (
-                <p className="text-xs text-green-700 opacity-80">
-                  No reqs linked to this candidate. Link a req below first, or leave blank.
+          {isHireStage && (() => {
+            // Flat list of open HC slots across all linked reqs
+            const openSlots = linkedReqs.flatMap(r =>
+              (hireSlots[r.id] || [])
+                .filter(s => s.status === 'open')
+                .map(s => ({
+                  slotId: s.id,
+                  reqId:  r.id,
+                  label:  `${r.title}${s.label ? ` — ${s.label}` : s.wd_req_id ? ` (${s.wd_req_id})` : ''}`,
+                }))
+            );
+            const hasOpenSlots = openSlots.length > 0;
+
+            return (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 space-y-2">
+                <p className="text-xs font-semibold text-green-800 flex items-center gap-1.5">
+                  🎉 Hire — Which open HC slot does this fill?
                 </p>
-              ) : (
-                <select
-                  value={form.hired_for_req_id}
-                  onChange={set('hired_for_req_id')}
-                  className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                >
-                  <option value="">— Select req to close as Filled —</option>
-                  {linkedReqs.map(r => (
-                    <option key={r.id} value={r.id}>
-                      {r.title}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <p className="text-xs text-green-700 opacity-70">
-                The selected req will be automatically marked as <strong>Filled</strong>.
-              </p>
-            </div>
-          )}
+
+                {linkedReqs.length === 0 ? (
+                  <p className="text-xs text-green-700 opacity-80">
+                    No reqs linked to this candidate. Link a req below first, or leave blank.
+                  </p>
+                ) : hasOpenSlots ? (
+                  /* Slot-based picker */
+                  <select
+                    value={form.hired_slot_id}
+                    onChange={e => {
+                      const slot = openSlots.find(s => String(s.slotId) === e.target.value);
+                      setForm(f => ({
+                        ...f,
+                        hired_slot_id:    e.target.value,
+                        hired_for_req_id: slot ? String(slot.reqId) : '',
+                      }));
+                    }}
+                    className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">— Select open HC slot —</option>
+                    {openSlots.map(s => (
+                      <option key={s.slotId} value={s.slotId}>{s.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  /* Fallback: no slots configured, pick req directly */
+                  <select
+                    value={form.hired_for_req_id}
+                    onChange={set('hired_for_req_id')}
+                    className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">— Select req to close as Filled —</option>
+                    {linkedReqs.map(r => (
+                      <option key={r.id} value={r.id}>{r.title}</option>
+                    ))}
+                  </select>
+                )}
+
+                <p className="text-xs text-green-700 opacity-70">
+                  {hasOpenSlots
+                    ? 'The selected HC slot and its req will be marked as Filled.'
+                    : 'The selected req will be automatically marked as Filled.'}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* LinkedIn / Workday */}
           <div className="grid grid-cols-2 gap-3">
