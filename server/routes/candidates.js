@@ -116,8 +116,14 @@ function e(v) { return v || null; }
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+// Always return a YYYY-MM-DD string in America/New_York, regardless of
+// what timezone the server OS is set to (Railway uses UTC).
 function localDateStr(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(d);
+  return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'day').value}`;
 }
 
 // Returns a YYYY-MM-DD date string n business days from today

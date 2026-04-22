@@ -213,63 +213,63 @@ function ByReqTab() {
           </button>
         ))}
 
-        {/* Divider */}
-        {uniquePriorities.length > 0 && <span className="w-px h-5 bg-slate-200 mx-1" />}
+        <span className="w-px h-5 bg-slate-200 mx-1" />
 
-        {/* Priority tags — one per unique value from the data */}
-        {uniquePriorities.map(p => (
-          <button
-            key={p}
-            onClick={() => setPriorityFilter(priorityFilter === p ? 'all' : p)}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-              priorityFilter === p ? priorityActiveStyle(p) : `${priorityIdleStyle(p)} hover:opacity-80`
-            }`}
-          >
-            {priorityLabel(p)}
-            <span className="ml-1.5 opacity-70">
-              {data.filter(r => r.priority === p).length}
-            </span>
-          </button>
-        ))}
-
-        {/* HM dropdown */}
-        {uniqueHMs.length > 0 && (
-          <>
-            <span className="w-px h-5 bg-slate-200 mx-1" />
-            <select
-              value={hmFilter}
-              onChange={e => setHmFilter(e.target.value)}
-              className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
-                hmFilter
-                  ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
-                  : 'border-slate-200 bg-white text-slate-600'
+        {/* Priority tags — always show all four levels */}
+        {(['critical', 'high', 'medium', 'low']).map(p => {
+          const count = data.filter(r => r.priority === p).length;
+          return (
+            <button
+              key={p}
+              onClick={() => count > 0 && setPriorityFilter(priorityFilter === p ? 'all' : p)}
+              disabled={count === 0}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                count === 0
+                  ? 'opacity-30 cursor-default border-slate-200 bg-slate-50 text-slate-400'
+                  : priorityFilter === p
+                    ? priorityActiveStyle(p)
+                    : `${priorityIdleStyle(p)} hover:opacity-80`
               }`}
             >
-              <option value="">All HMs</option>
-              {uniqueHMs.map(hm => (
-                <option key={hm} value={hm}>{hm}</option>
-              ))}
-            </select>
-          </>
-        )}
+              {priorityLabel(p)}
+              <span className="ml-1.5 opacity-70">{count}</span>
+            </button>
+          );
+        })}
 
-        {/* Dept dropdown */}
-        {uniqueDepts.length > 0 && (
-          <select
-            value={deptFilter}
-            onChange={e => setDeptFilter(e.target.value)}
-            className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
-              deptFilter
-                ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
-                : 'border-slate-200 bg-white text-slate-600'
-            }`}
-          >
-            <option value="">All Depts</option>
-            {uniqueDepts.map(d => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        )}
+        <span className="w-px h-5 bg-slate-200 mx-1" />
+
+        {/* HM dropdown — always visible */}
+        <select
+          value={hmFilter}
+          onChange={e => setHmFilter(e.target.value)}
+          className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+            hmFilter
+              ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
+              : 'border-slate-200 bg-white text-slate-600'
+          }`}
+        >
+          <option value="">All HMs{uniqueHMs.length === 0 ? ' (none set)' : ''}</option>
+          {uniqueHMs.map(hm => (
+            <option key={hm} value={hm}>{hm}</option>
+          ))}
+        </select>
+
+        {/* Dept dropdown — always visible */}
+        <select
+          value={deptFilter}
+          onChange={e => setDeptFilter(e.target.value)}
+          className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+            deptFilter
+              ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
+              : 'border-slate-200 bg-white text-slate-600'
+          }`}
+        >
+          <option value="">All Depts{uniqueDepts.length === 0 ? ' (none set)' : ''}</option>
+          {uniqueDepts.map(d => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
 
         {/* Clear */}
         {hasActiveFilters && (

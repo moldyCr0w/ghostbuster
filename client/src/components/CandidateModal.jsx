@@ -4,8 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import WorkdayPushModal from './WorkdayPushModal';
 
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Pin to Eastern time — Railway (and the stored dates) all use America/New_York
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'day').value}`;
 }
 
 function fmtDate(iso) {

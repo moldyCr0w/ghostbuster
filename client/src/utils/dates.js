@@ -1,15 +1,22 @@
 /* ── Calendar helpers ─────────────────────────────────────── */
 
+// All date comparisons in the UI use America/New_York so they stay in sync
+// with the server (Railway runs UTC; dates stored in the DB are Eastern).
+function easternDateStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'day').value}`;
+}
+
 export function localToday() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return easternDateStr();
 }
 
 // Adds n calendar days to today's date string
 export function calendarDaysFromToday(n) {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return easternDateStr(new Date(Date.now() + n * 864e5));
 }
 
 // Calendar days until a YYYY-MM-DD string (negative = overdue)
@@ -17,8 +24,10 @@ export function daysUntil(dateStr) {
   if (!dateStr) return null;
   const [y, m, d] = dateStr.split('-').map(Number);
   const target = new Date(y, m - 1, d);
-  const today  = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Compare against Eastern midnight so the sign flips at the right time
+  const todayEastern = easternDateStr();
+  const [ty, tm, td] = todayEastern.split('-').map(Number);
+  const today = new Date(ty, tm - 1, td);
   return Math.round((target - today) / 864e5);
 }
 
