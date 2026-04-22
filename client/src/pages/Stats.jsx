@@ -126,38 +126,31 @@ function OverviewTab({ data }) {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-// Map well-known priority labels to colors; unknown values fall back to slate.
-// Keys are lowercased for matching; labels preserve the casing stored in the DB.
-const PRIORITY_COLORS = {
-  'high':        'bg-red-50 text-red-700 border border-red-200',
-  'critical':    'bg-red-50 text-red-700 border border-red-200',
-  'all hands':   'bg-purple-50 text-purple-700 border border-purple-200',
-  'all-hands':   'bg-purple-50 text-purple-700 border border-purple-200',
-  'medium':      'bg-orange-50 text-orange-700 border border-orange-200',
-  'low':         'bg-slate-100 text-slate-500 border border-slate-200',
+// Must match PRIORITY_CFG in Reqs.jsx
+const PRIORITY_CFG = {
+  critical: { label: 'P1 · Critical', idle: 'bg-red-50 text-red-700 border border-red-200',       active: 'bg-red-600 text-white border border-red-600'       },
+  high:     { label: 'P2 · High',     idle: 'bg-orange-50 text-orange-700 border border-orange-200', active: 'bg-orange-500 text-white border border-orange-500' },
+  medium:   { label: 'P3 · Medium',   idle: 'bg-yellow-50 text-yellow-700 border border-yellow-200', active: 'bg-yellow-500 text-white border border-yellow-500' },
+  low:      { label: 'P4 · Low',      idle: 'bg-slate-100 text-slate-500 border border-slate-200',   active: 'bg-slate-500 text-white border border-slate-500'   },
 };
 
-// Active (selected) versions for the same keys
-const PRIORITY_COLORS_ACTIVE = {
-  'high':        'bg-red-600 text-white border border-red-600',
-  'critical':    'bg-red-600 text-white border border-red-600',
-  'all hands':   'bg-purple-600 text-white border border-purple-600',
-  'all-hands':   'bg-purple-600 text-white border border-purple-600',
-  'medium':      'bg-orange-500 text-white border border-orange-500',
-  'low':         'bg-slate-500 text-white border border-slate-500',
-};
+function priorityLabel(key) {
+  return PRIORITY_CFG[key?.toLowerCase()]?.label || key || '—';
+}
 
-function priorityStyle(priority, active = false) {
-  const key = (priority || '').toLowerCase();
-  if (active) return PRIORITY_COLORS_ACTIVE[key] || 'bg-slate-700 text-white border border-slate-700';
-  return PRIORITY_COLORS[key] || 'bg-slate-100 text-slate-500 border border-slate-200';
+function priorityIdleStyle(key) {
+  return PRIORITY_CFG[key?.toLowerCase()]?.idle || 'bg-slate-100 text-slate-500 border border-slate-200';
+}
+
+function priorityActiveStyle(key) {
+  return PRIORITY_CFG[key?.toLowerCase()]?.active || 'bg-slate-700 text-white border border-slate-700';
 }
 
 function PriorityBadge({ priority }) {
   if (!priority) return null;
   return (
-    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${priorityStyle(priority)}`}>
-      {priority}
+    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${priorityIdleStyle(priority)}`}>
+      {priorityLabel(priority)}
     </span>
   );
 }
@@ -229,12 +222,10 @@ function ByReqTab() {
             key={p}
             onClick={() => setPriorityFilter(priorityFilter === p ? 'all' : p)}
             className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-              priorityFilter === p
-                ? priorityStyle(p, true)
-                : `${priorityStyle(p)} hover:opacity-80`
+              priorityFilter === p ? priorityActiveStyle(p) : `${priorityIdleStyle(p)} hover:opacity-80`
             }`}
           >
-            {p}
+            {priorityLabel(p)}
             <span className="ml-1.5 opacity-70">
               {data.filter(r => r.priority === p).length}
             </span>
