@@ -115,6 +115,12 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     }
   }, [candidate, selectedIds.length]); // eslint-disable-line
 
+  // These must be declared before the useEffect that uses them in its dependency array.
+  // Putting const after a useEffect that references it causes a temporal dead zone ReferenceError.
+  const selectedStage = stages.find(s => s.id === Number(form.stage_id));
+  const isHireStage   = !!selectedStage?.is_hire;
+  const linkedReqs    = reqs.filter(r => selectedIds.includes(r.id));
+
   // Load open WD HC slots for all linked reqs whenever the hire stage is active
   useEffect(() => {
     if (!isHireStage || linkedReqs.length === 0) { setHireSlots({}); return; }
@@ -152,10 +158,6 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
     setParsing(false);
   };
 
-  // Determine if the currently selected stage is a hire stage
-  const selectedStage  = stages.find(s => s.id === Number(form.stage_id));
-  const isHireStage    = !!selectedStage?.is_hire;
-
   // HM Review stage — used for the "Submit for HM Review" button
   const hmReviewStage   = stages.find(s => s.is_hm_review);
   const alreadyHmReview = !!selectedStage?.is_hm_review;
@@ -165,9 +167,6 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const isOfferStage = !!candidate && selectedStage?.name?.toLowerCase() === 'offer';
   const alreadyPushedToWd = !!(candidate?.wd_sync_status === 'synced' || wdPushed);
   const wdFailed = candidate?.wd_sync_status === 'failed';
-
-  // Reqs the candidate is linked to (for the "Filling Req" dropdown)
-  const linkedReqs = reqs.filter(r => selectedIds.includes(r.id));
 
   // ── Video note handlers ──
   const handleAddVideoNote = async () => {
