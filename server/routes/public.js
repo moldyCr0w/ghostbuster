@@ -1,9 +1,10 @@
-const express = require('express');
-const router  = express.Router();
-const db      = require('../db');
-const multer  = require('multer');
-const path    = require('path');
-const fs      = require('fs');
+const express  = require('express');
+const router   = express.Router();
+const db       = require('../db');
+const multer   = require('multer');
+const path     = require('path');
+const fs       = require('fs');
+const { sendMail } = require('../email');
 
 /* ─── resume upload for applications ────────────────────────── */
 
@@ -143,6 +144,27 @@ router.post('/jobs/:token/apply', upload.single('resume'), (req, res) => {
     }
 
     res.status(201).json({ success: true, message: 'Application received — thank you!' });
+
+    // Send confirmation email (non-blocking — don't let failures affect the response)
+    sendMail({
+      to:      normalizedEmail,
+      subject: `Application received — ${row.title}`,
+      text: [
+        `Hi ${first_name.trim()},`,
+        '',
+        `Thanks for applying for the ${row.title} position${row.department ? ` (${row.department})` : ''} at Stord. We've received your application and will be in touch if your background is a match.`,
+        '',
+        'Best,',
+        'The Stord Talent Team',
+      ].join('\n'),
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#1e293b">
+          <p>Hi ${first_name.trim()},</p>
+          <p>Thanks for applying for the <strong>${row.title}</strong>${row.department ? ` (${row.department})` : ''} position at Stord. We've received your application and will be in touch if your background is a match.</p>
+          <p style="margin-top:24px">Best,<br>The Stord Talent Team</p>
+        </div>
+      `,
+    }).catch(err => console.error('[public apply] confirmation email failed:', err));
   } catch (err) {
     console.error('[public apply]', err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });

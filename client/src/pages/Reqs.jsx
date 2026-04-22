@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -45,6 +46,7 @@ export default function Reqs() {
 
   const [plans, setPlans]       = useState([]);   // interview plans
   const [recruiterFilter, setRecruiterFilter] = useState('all');
+  const [jdPreview, setJdPreview] = useState(false);
 
   const load = useCallback(async () => {
     setReqs(await api.getReqs());
@@ -300,14 +302,28 @@ export default function Reqs() {
                             />
                           </div>
                           <div className="w-full">
-                            <label className="block text-xs text-slate-500 mb-1">Job Description (shown on public posting page)</label>
-                            <textarea
-                              value={editForm.job_description}
-                              onChange={setEdit('job_description')}
-                              rows={6}
-                              placeholder="Describe the role, responsibilities, requirements, and what makes this a great opportunity…"
-                              className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                            />
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs text-slate-500">Job Description (shown on public posting page)</label>
+                              <div className="flex rounded-md overflow-hidden border border-slate-200 text-xs">
+                                <button type="button" onClick={() => setJdPreview(false)} className={`px-2 py-0.5 ${!jdPreview ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>Write</button>
+                                <button type="button" onClick={() => setJdPreview(true)}  className={`px-2 py-0.5 ${jdPreview  ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>Preview</button>
+                              </div>
+                            </div>
+                            {jdPreview ? (
+                              <div className="w-full min-h-[144px] border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 leading-relaxed markdown-body">
+                                {editForm.job_description
+                                  ? <ReactMarkdown>{editForm.job_description}</ReactMarkdown>
+                                  : <span className="text-slate-400 italic">Nothing to preview yet.</span>}
+                              </div>
+                            ) : (
+                              <textarea
+                                value={editForm.job_description}
+                                onChange={setEdit('job_description')}
+                                rows={6}
+                                placeholder="Supports **markdown** — headers, bullets, bold, links…"
+                                className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono"
+                              />
+                            )}
                           </div>
                           <div className="flex items-center gap-2 pb-0.5">
                             <label className="flex items-center gap-2 cursor-pointer select-none">
