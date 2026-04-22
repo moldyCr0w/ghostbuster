@@ -241,27 +241,41 @@ function ReqHealthCard({ req, candidates, stages, hmStage }) {
   );
 }
 
-/* ── Summary strip ─────────────────────────────────────────────── */
-function SummaryStrip({ reqsWithStatus }) {
+/* ── Summary strip (filter tabs) ──────────────────────────────── */
+function SummaryStrip({ reqsWithStatus, activeFilter, onFilter }) {
   const counts = { healthy: 0, warning: 0, danger: 0, critical: 0 };
   for (const { status } of reqsWithStatus) counts[status]++;
 
   const items = [
-    { key: 'critical', label: 'All Hands',   color: 'text-red-700 bg-red-50 border-red-200'    },
-    { key: 'danger',   label: 'At Risk',      color: 'text-orange-700 bg-orange-50 border-orange-200' },
-    { key: 'warning',  label: 'Watch Closely',color: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
-    { key: 'healthy',  label: 'Healthy',      color: 'text-green-700 bg-green-50 border-green-200'  },
+    { key: 'critical', label: 'All Hands',    icon: '🔴', activeColor: 'bg-red-100 text-red-800 border-red-400 ring-2 ring-red-300',         inactiveColor: 'text-red-700 bg-red-50 border-red-200 hover:bg-red-100'         },
+    { key: 'danger',   label: 'At Risk',       icon: '🚨', activeColor: 'bg-orange-100 text-orange-800 border-orange-400 ring-2 ring-orange-300', inactiveColor: 'text-orange-700 bg-orange-50 border-orange-200 hover:bg-orange-100' },
+    { key: 'warning',  label: 'Watch Closely', icon: '⚠️', activeColor: 'bg-yellow-100 text-yellow-800 border-yellow-400 ring-2 ring-yellow-300', inactiveColor: 'text-yellow-700 bg-yellow-50 border-yellow-200 hover:bg-yellow-100' },
+    { key: 'healthy',  label: 'Healthy',       icon: '✅', activeColor: 'bg-green-100 text-green-800 border-green-400 ring-2 ring-green-300',    inactiveColor: 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100'   },
   ];
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {items.map(({ key, label, color }) => (
-        <div key={key} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold ${color}`}>
-          <span className="text-lg leading-none">
-            {key === 'critical' ? '🔴' : key === 'danger' ? '🚨' : key === 'warning' ? '⚠️' : '✅'}
-          </span>
+    <div className="flex flex-wrap gap-2 items-center">
+      <button
+        onClick={() => onFilter(null)}
+        className={`px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+          activeFilter === null
+            ? 'bg-slate-200 text-slate-900 border-slate-400 ring-2 ring-slate-300'
+            : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100'
+        }`}
+      >
+        All ({reqsWithStatus.length})
+      </button>
+      {items.map(({ key, label, icon, activeColor, inactiveColor }) => (
+        <button
+          key={key}
+          onClick={() => onFilter(activeFilter === key ? null : key)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+            activeFilter === key ? activeColor : inactiveColor
+          }`}
+        >
+          <span className="text-lg leading-none">{icon}</span>
           <span>{counts[key]} {label}</span>
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -269,10 +283,12 @@ function SummaryStrip({ reqsWithStatus }) {
 
 /* ── Page ──────────────────────────────────────────────────────── */
 export default function PipelineHealth() {
-  const [loading,    setLoading]    = useState(true);
-  const [reqs,       setReqs]       = useState([]);
-  const [candidates, setCandidates] = useState([]);
-  const [stages,     setStages]     = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [reqs,         setReqs]         = useState([]);
+  const [candidates,   setCandidates]   = useState([]);
+  const [stages,       setStages]       = useState([]);
+  const [statusFilter, setStatusFilter] = useState(null); // null = All
+  const [hmFilter,     setHmFilter]     = useState('');
 
   useEffect(() => {
     async function load() {
@@ -315,6 +331,9 @@ export default function PipelineHealth() {
   const CLOSED_STATUSES = new Set(['closed', 'filled', 'cancelled', 'on_hold']);
   const openReqs = reqs.filter(r => !CLOSED_STATUSES.has((r.status || '').toLowerCase()));
 
+  /* ── Hiring managers for filter dropdown ──────────────────────── */
+  const allHMs = [...new Set(openReqs.map(r => r.hiring_manager).filter(Boolean))].sort();
+
   /* ── Compute status per req for sorting + summary strip ───────── */
   const reqsWithStatus = openReqs.map(req => {
     const cands       = candsByReq[req.id] || [];
@@ -329,6 +348,15 @@ export default function PipelineHealth() {
     return STATUS_RANK[a.status] - STATUS_RANK[b.status];
   });
 
+  /* ── Apply active filters ─────────────────────────────────────── */
+  const filteredReqs = reqsWithStatus.filter(({ req, status }) => {
+    if (statusFilter && status !== statusFilter) return false;
+    if (hmFilter && req.hiring_manager !== hmFilter) return false;
+    return true;
+  });
+
+  const hasFilters = statusFilter !== null || hmFilter !== '';
+
   return (
     <div className="max-w-3xl mx-auto p-8 space-y-6">
 
@@ -340,18 +368,56 @@ export default function PipelineHealth() {
         </p>
       </div>
 
-      {/* ── Summary strip ──────────────────────────────────────────── */}
-      {reqsWithStatus.length > 0 && <SummaryStrip reqsWithStatus={reqsWithStatus} />}
+      {/* ── Filters row ────────────────────────────────────────────── */}
+      {reqsWithStatus.length > 0 && (
+        <div className="space-y-3">
+          <SummaryStrip
+            reqsWithStatus={reqsWithStatus}
+            activeFilter={statusFilter}
+            onFilter={setStatusFilter}
+          />
+          <div className="flex items-center gap-3 flex-wrap">
+            {allHMs.length > 0 && (
+              <select
+                value={hmFilter}
+                onChange={e => setHmFilter(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Hiring Managers</option>
+                {allHMs.map(hm => (
+                  <option key={hm} value={hm}>{hm}</option>
+                ))}
+              </select>
+            )}
+            {hasFilters && (
+              <button
+                onClick={() => { setStatusFilter(null); setHmFilter(''); }}
+                className="text-xs text-slate-500 hover:text-slate-700 underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Req cards ──────────────────────────────────────────────── */}
-      {reqsWithStatus.length === 0 ? (
+      {filteredReqs.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-3">📋</p>
-          <p className="font-medium">No open requisitions</p>
+          <p className="text-4xl mb-3">{hasFilters ? '🔍' : '📋'}</p>
+          <p className="font-medium">{hasFilters ? 'No reqs match the current filters' : 'No open requisitions'}</p>
+          {hasFilters && (
+            <button
+              onClick={() => { setStatusFilter(null); setHmFilter(''); }}
+              className="mt-3 text-sm text-blue-600 hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          {reqsWithStatus.map(({ req }) => (
+          {filteredReqs.map(({ req }) => (
             <ReqHealthCard
               key={req.id}
               req={req}
