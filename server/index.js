@@ -56,10 +56,14 @@ app.listen(PORT, () => {
   sendHmReminders().catch(err => console.error('[reminders] Startup check failed:', err.message));
 
   // Run daily interview report check on startup and then every hour.
-  // The report itself sends only once per day (after 08:00 server time).
+  // The report itself sends once per day at or after 09:00 America/New_York
+  // (handles EST/EDT automatically via the Intl API — no extra packages needed).
   const { sendDailyInterviewReport } = require('./reports');
   function checkDailyReport() {
-    const hour = new Date().getHours();
+    const hour = parseInt(
+      new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }),
+      10
+    );
     if (hour >= 9) {
       sendDailyInterviewReport().catch(err =>
         console.error('[reports] Daily report check failed:', err.message)
