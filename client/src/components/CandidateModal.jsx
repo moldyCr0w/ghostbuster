@@ -167,8 +167,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
   const alreadyHmReview = !!selectedStage?.is_hm_review;
   const canSubmitHm     = !!hmReviewStage && !alreadyHmReview && !selectedStage?.is_terminal;
 
-  // Workday push — visible when the candidate is in the Offer stage
-  const isOfferStage = !!candidate && selectedStage?.name?.toLowerCase() === 'offer';
+  // Workday push — available at any stage
   const alreadyPushedToWd = !!(candidate?.wd_sync_status === 'synced' || wdPushed);
   const wdFailed = candidate?.wd_sync_status === 'failed';
 
@@ -883,7 +882,7 @@ export default function CandidateModal({ candidate, stages, onSave, onClose }) {
             </button>
           )}
 
-          {isOfferStage && (
+          {candidate && (
             alreadyPushedToWd ? (
               <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
                 <div className="flex items-center gap-2">
