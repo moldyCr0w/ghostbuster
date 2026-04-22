@@ -100,7 +100,7 @@ function CandidateCard({ candidate, today, onEdit, onDragStart, isEligible, onCa
           {candidate.reqs.map(r => (
             <span
               key={r.id}
-              className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-xs rounded font-mono"
+              className="px-1.5 py-0.5 bg-slate-100 text-slate-600 text-xs rounded font-medium"
             >
               {r.title}
             </span>

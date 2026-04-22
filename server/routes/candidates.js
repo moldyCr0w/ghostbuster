@@ -407,7 +407,7 @@ router.post('/', requireAuth, (req, res) => {
 // PUT /api/candidates/:id
 router.put('/:id', requireAuth, (req, res) => {
   const { first_name, last_name, email, stage_id,
-          linkedin_url, wd_url, notes, req_ids, hired_for_req_id, sourced_by } = req.body;
+          linkedin_url, wd_url, notes, req_ids, hired_for_req_id, hired_slot_id, sourced_by } = req.body;
 
   const existing     = db.prepare('SELECT stage_id FROM candidates WHERE id=?').get(req.params.id);
   const stageChanged = existing && Number(existing.stage_id) !== Number(stage_id);
@@ -416,6 +416,7 @@ router.put('/:id', requireAuth, (req, res) => {
   let isHire             = false;
   let isTerminal         = false;
   let hireReqId          = null;
+  let hireSlotId         = null;
   let requiresScheduling = false;
   let isEligible         = false; // eligible for card_sub_status (post-HM-review, non-terminal, non-hire)
   if (stageChanged) {
@@ -423,8 +424,18 @@ router.put('/:id', requireAuth, (req, res) => {
     isHire             = !!newStage?.is_hire;
     isTerminal         = !!newStage?.is_terminal;
     requiresScheduling = !!newStage?.requires_scheduling;
-    hireReqId          = isHire && hired_for_req_id ? Number(hired_for_req_id) : null;
     isEligible         = !newStage?.is_hm_review && !newStage?.is_terminal && !newStage?.is_hire;
+
+    if (isHire) {
+      // Prefer slot-driven hire: derive req from the selected slot
+      if (hired_slot_id) {
+        hireSlotId = Number(hired_slot_id);
+        const slot = db.prepare('SELECT req_id FROM req_wd_slots WHERE id = ?').get(hireSlotId);
+        hireReqId  = slot?.req_id ?? null;
+      } else if (hired_for_req_id) {
+        hireReqId = Number(hired_for_req_id);
+      }
+    }
   }
 
   const tx = db.transaction(() => {
@@ -449,8 +460,8 @@ router.put('/:id', requireAuth, (req, res) => {
       sql += `, schedule_pending=?`;
       args.push(requiresScheduling && !isEligible ? 1 : 0);
       if (isHire) {
-        sql += `, next_step_due=NULL, hired_for_req_id=?`;
-        args.push(hireReqId);
+        sql += `, next_step_due=NULL, hired_for_req_id=?, hired_slot_id=?`;
+        args.push(hireReqId, hireSlotId);
       } else if (isTerminal) {
         // Preserve the existing SLA clock — don't restart it on rejection.
         // COALESCE sets a fresh 5-day window only if the value was already NULL.
@@ -470,6 +481,13 @@ router.put('/:id', requireAuth, (req, res) => {
     // Auto-fill the req when moving to a hire stage
     if (stageChanged && isHire && hireReqId) {
       db.prepare("UPDATE reqs SET status='filled' WHERE id=?").run(hireReqId);
+    }
+
+    // Mark the selected WD HC slot as filled and link it to this candidate
+    if (stageChanged && isHire && hireSlotId) {
+      db.prepare(`
+        UPDATE req_wd_slots SET status = 'filled', candidate_id = ? WHERE id = ?
+      `).run(Number(req.params.id), hireSlotId);
     }
 
     if (req_ids !== undefined) setReqs(req.params.id, req_ids, sourced_by || req.user?.id);
