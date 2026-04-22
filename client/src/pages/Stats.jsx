@@ -124,12 +124,33 @@ function OverviewTab({ data }) {
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────
+
+const PRIORITY_META = {
+  high:   { label: 'High',   color: 'bg-red-50 text-red-700 border border-red-200'         },
+  medium: { label: 'Medium', color: 'bg-orange-50 text-orange-700 border border-orange-200' },
+  low:    { label: 'Low',    color: 'bg-slate-100 text-slate-500'                           },
+};
+
+function PriorityBadge({ priority }) {
+  if (!priority) return null;
+  const meta = PRIORITY_META[priority?.toLowerCase()] || { label: priority, color: 'bg-slate-100 text-slate-500' };
+  return (
+    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${meta.color}`}>
+      {meta.label}
+    </span>
+  );
+}
+
 // ── Tab: By Requisition ──────────────────────────────────────────
 
 function ByReqTab() {
-  const [data, setData]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('open');
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [statusFilter, setStatusFilter] = useState('open');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [hmFilter, setHmFilter] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
 
   useEffect(() => {
     api.getStatsByReq().then(res => {
@@ -140,17 +161,31 @@ function ByReqTab() {
 
   if (loading) return <div className="text-slate-400 text-sm py-12 text-center">Loading…</div>;
 
-  const filtered = filter === 'all' ? data : data.filter(r => r.status === filter);
+  // Derive unique filter options from full dataset
+  const uniqueHMs   = [...new Set(data.map(r => r.hiring_manager).filter(Boolean))].sort();
+  const uniqueDepts = [...new Set(data.map(r => r.department).filter(Boolean))].sort();
+
+  // Apply all filters
+  const filtered = data.filter(r => {
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+    if (priorityFilter !== 'all' && (r.priority || '').toLowerCase() !== priorityFilter) return false;
+    if (hmFilter   && r.hiring_manager !== hmFilter)  return false;
+    if (deptFilter && r.department     !== deptFilter) return false;
+    return true;
+  });
+
+  const hasActiveFilters = priorityFilter !== 'all' || hmFilter || deptFilter;
 
   return (
     <div>
-      <div className="flex gap-2 mb-6">
+      {/* Row 1: status pills */}
+      <div className="flex gap-2 mb-3">
         {[['open', 'Open'], ['filled', 'Filled'], ['all', 'All']].map(([val, label]) => (
           <button
             key={val}
-            onClick={() => setFilter(val)}
+            onClick={() => setStatusFilter(val)}
             className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === val
+              statusFilter === val
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
@@ -163,9 +198,95 @@ function ByReqTab() {
         ))}
       </div>
 
+      {/* Row 2: Priority + HM + Department dropdowns */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {/* Priority */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500 font-medium">Priority</span>
+          <div className="flex gap-1">
+            {[['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']].map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setPriorityFilter(val)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  priorityFilter === val
+                    ? val === 'high'   ? 'bg-red-600 text-white'
+                    : val === 'medium' ? 'bg-orange-500 text-white'
+                    : val === 'low'    ? 'bg-slate-500 text-white'
+                    :                    'bg-slate-700 text-white'
+                    : val === 'high'   ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                    : val === 'medium' ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+                    : val === 'low'    ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                    :                    'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Hiring Manager */}
+        {uniqueHMs.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium">HM</span>
+            <select
+              value={hmFilter}
+              onChange={e => setHmFilter(e.target.value)}
+              className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                hmFilter
+                  ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+            >
+              <option value="">All</option>
+              {uniqueHMs.map(hm => (
+                <option key={hm} value={hm}>{hm}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Department */}
+        {uniqueDepts.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium">Dept</span>
+            <select
+              value={deptFilter}
+              onChange={e => setDeptFilter(e.target.value)}
+              className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+                deptFilter
+                  ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+            >
+              <option value="">All</option>
+              {uniqueDepts.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Clear active filters */}
+        {hasActiveFilters && (
+          <button
+            onClick={() => { setPriorityFilter('all'); setHmFilter(''); setDeptFilter(''); }}
+            className="text-xs text-slate-400 hover:text-slate-600 underline ml-1 transition-colors"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Results count */}
+      <p className="text-xs text-slate-400 mb-4">
+        Showing <span className="font-semibold text-slate-600">{filtered.length}</span> of {data.length} reqs
+      </p>
+
       {filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 py-12 text-center text-slate-400 text-sm">
-          No reqs found.
+          No reqs match the selected filters.
         </div>
       ) : (
         <div className="space-y-4">
@@ -188,6 +309,7 @@ function ByReqTab() {
                       }`}>
                         {req.status === 'open' ? 'Open' : 'Filled'}
                       </span>
+                      <PriorityBadge priority={req.priority} />
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 flex-wrap">
                       {req.department && <span>{req.department}</span>}
@@ -237,8 +359,9 @@ function ByReqTab() {
 // ── Tab: By Hiring Manager ────────────────────────────────────────
 
 function ByHmTab() {
-  const [data, setData]     = useState(null);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch]   = useState('');
 
   useEffect(() => {
     api.getStatsByHm().then(res => {
@@ -257,9 +380,35 @@ function ByHmTab() {
     );
   }
 
+  const filtered = search.trim()
+    ? data.filter(hm => hm.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : data;
+
   return (
-    <div className="space-y-4">
-      {data.map(hm => (
+    <div>
+      {/* Search */}
+      <div className="mb-5">
+        <input
+          type="text"
+          placeholder="Search hiring manager…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full max-w-xs text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 placeholder-slate-400"
+        />
+        {search && (
+          <span className="ml-3 text-xs text-slate-400">
+            {filtered.length} of {data.length} HMs
+          </span>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 py-12 text-center text-slate-400 text-sm">
+          No hiring managers match "{search}".
+        </div>
+      ) : (
+      <div className="space-y-4">
+      {filtered.map(hm => (
         <div key={hm.name} className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
@@ -319,6 +468,8 @@ function ByHmTab() {
           </div>
         </div>
       ))}
+      </div>
+      )}
     </div>
   );
 }
