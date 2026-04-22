@@ -72,8 +72,15 @@ app.listen(PORT, () => {
   }
   checkDailyReport();
 
+  // HM reminders — once per hour is plenty
   setInterval(() => {
     sendHmReminders().catch(err => console.error('[reminders] Hourly check failed:', err.message));
+  }, 60 * 60 * 1000);
+
+  // Daily report — check every 5 minutes so a server restart near 9 am Eastern
+  // never causes the email to be delayed by up to an hour.
+  // The "already sent today" guard in sendDailyInterviewReport prevents duplicates.
+  setInterval(() => {
     checkDailyReport();
-  }, 60 * 60 * 1000); // every hour
+  }, 5 * 60 * 1000);
 });
