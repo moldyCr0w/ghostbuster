@@ -126,18 +126,38 @@ function OverviewTab({ data }) {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-const PRIORITY_META = {
-  high:   { label: 'High',   color: 'bg-red-50 text-red-700 border border-red-200'         },
-  medium: { label: 'Medium', color: 'bg-orange-50 text-orange-700 border border-orange-200' },
-  low:    { label: 'Low',    color: 'bg-slate-100 text-slate-500'                           },
+// Map well-known priority labels to colors; unknown values fall back to slate.
+// Keys are lowercased for matching; labels preserve the casing stored in the DB.
+const PRIORITY_COLORS = {
+  'high':        'bg-red-50 text-red-700 border border-red-200',
+  'critical':    'bg-red-50 text-red-700 border border-red-200',
+  'all hands':   'bg-purple-50 text-purple-700 border border-purple-200',
+  'all-hands':   'bg-purple-50 text-purple-700 border border-purple-200',
+  'medium':      'bg-orange-50 text-orange-700 border border-orange-200',
+  'low':         'bg-slate-100 text-slate-500 border border-slate-200',
 };
+
+// Active (selected) versions for the same keys
+const PRIORITY_COLORS_ACTIVE = {
+  'high':        'bg-red-600 text-white border border-red-600',
+  'critical':    'bg-red-600 text-white border border-red-600',
+  'all hands':   'bg-purple-600 text-white border border-purple-600',
+  'all-hands':   'bg-purple-600 text-white border border-purple-600',
+  'medium':      'bg-orange-500 text-white border border-orange-500',
+  'low':         'bg-slate-500 text-white border border-slate-500',
+};
+
+function priorityStyle(priority, active = false) {
+  const key = (priority || '').toLowerCase();
+  if (active) return PRIORITY_COLORS_ACTIVE[key] || 'bg-slate-700 text-white border border-slate-700';
+  return PRIORITY_COLORS[key] || 'bg-slate-100 text-slate-500 border border-slate-200';
+}
 
 function PriorityBadge({ priority }) {
   if (!priority) return null;
-  const meta = PRIORITY_META[priority?.toLowerCase()] || { label: priority, color: 'bg-slate-100 text-slate-500' };
   return (
-    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${meta.color}`}>
-      {meta.label}
+    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${priorityStyle(priority)}`}>
+      {priority}
     </span>
   );
 }
@@ -162,13 +182,14 @@ function ByReqTab() {
   if (loading) return <div className="text-slate-400 text-sm py-12 text-center">Loading…</div>;
 
   // Derive unique filter options from full dataset
-  const uniqueHMs   = [...new Set(data.map(r => r.hiring_manager).filter(Boolean))].sort();
-  const uniqueDepts = [...new Set(data.map(r => r.department).filter(Boolean))].sort();
+  const uniquePriorities = [...new Set(data.map(r => r.priority).filter(Boolean))].sort();
+  const uniqueHMs        = [...new Set(data.map(r => r.hiring_manager).filter(Boolean))].sort();
+  const uniqueDepts      = [...new Set(data.map(r => r.department).filter(Boolean))].sort();
 
   // Apply all filters
   const filtered = data.filter(r => {
     if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-    if (priorityFilter !== 'all' && (r.priority || '').toLowerCase() !== priorityFilter) return false;
+    if (priorityFilter !== 'all' && r.priority !== priorityFilter) return false;
     if (hmFilter   && r.hiring_manager !== hmFilter)  return false;
     if (deptFilter && r.department     !== deptFilter) return false;
     return true;
@@ -178,13 +199,15 @@ function ByReqTab() {
 
   return (
     <div>
-      {/* Row 1: status pills */}
-      <div className="flex gap-2 mb-3">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+
+        {/* Status pills */}
         {[['open', 'Open'], ['filled', 'Filled'], ['all', 'All']].map(([val, label]) => (
           <button
             key={val}
             onClick={() => setStatusFilter(val)}
-            className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               statusFilter === val
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -196,40 +219,32 @@ function ByReqTab() {
             </span>
           </button>
         ))}
-      </div>
 
-      {/* Row 2: Priority + HM + Department dropdowns */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        {/* Priority */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-500 font-medium">Priority</span>
-          <div className="flex gap-1">
-            {[['all', 'All'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']].map(([val, label]) => (
-              <button
-                key={val}
-                onClick={() => setPriorityFilter(val)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  priorityFilter === val
-                    ? val === 'high'   ? 'bg-red-600 text-white'
-                    : val === 'medium' ? 'bg-orange-500 text-white'
-                    : val === 'low'    ? 'bg-slate-500 text-white'
-                    :                    'bg-slate-700 text-white'
-                    : val === 'high'   ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
-                    : val === 'medium' ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
-                    : val === 'low'    ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                    :                    'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Divider */}
+        {uniquePriorities.length > 0 && <span className="w-px h-5 bg-slate-200 mx-1" />}
 
-        {/* Hiring Manager */}
+        {/* Priority tags — one per unique value from the data */}
+        {uniquePriorities.map(p => (
+          <button
+            key={p}
+            onClick={() => setPriorityFilter(priorityFilter === p ? 'all' : p)}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+              priorityFilter === p
+                ? priorityStyle(p, true)
+                : `${priorityStyle(p)} hover:opacity-80`
+            }`}
+          >
+            {p}
+            <span className="ml-1.5 opacity-70">
+              {data.filter(r => r.priority === p).length}
+            </span>
+          </button>
+        ))}
+
+        {/* HM dropdown */}
         {uniqueHMs.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">HM</span>
+          <>
+            <span className="w-px h-5 bg-slate-200 mx-1" />
             <select
               value={hmFilter}
               onChange={e => setHmFilter(e.target.value)}
@@ -239,42 +254,39 @@ function ByReqTab() {
                   : 'border-slate-200 bg-white text-slate-600'
               }`}
             >
-              <option value="">All</option>
+              <option value="">All HMs</option>
               {uniqueHMs.map(hm => (
                 <option key={hm} value={hm}>{hm}</option>
               ))}
             </select>
-          </div>
+          </>
         )}
 
-        {/* Department */}
+        {/* Dept dropdown */}
         {uniqueDepts.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">Dept</span>
-            <select
-              value={deptFilter}
-              onChange={e => setDeptFilter(e.target.value)}
-              className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
-                deptFilter
-                  ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
-            >
-              <option value="">All</option>
-              {uniqueDepts.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={deptFilter}
+            onChange={e => setDeptFilter(e.target.value)}
+            className={`text-xs rounded-lg px-2.5 py-1.5 border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-300 ${
+              deptFilter
+                ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
+                : 'border-slate-200 bg-white text-slate-600'
+            }`}
+          >
+            <option value="">All Depts</option>
+            {uniqueDepts.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
         )}
 
-        {/* Clear active filters */}
+        {/* Clear */}
         {hasActiveFilters && (
           <button
             onClick={() => { setPriorityFilter('all'); setHmFilter(''); setDeptFilter(''); }}
-            className="text-xs text-slate-400 hover:text-slate-600 underline ml-1 transition-colors"
+            className="text-xs text-slate-400 hover:text-slate-600 underline transition-colors"
           >
-            Clear filters
+            Clear
           </button>
         )}
       </div>
