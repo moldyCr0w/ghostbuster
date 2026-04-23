@@ -98,8 +98,26 @@ function CandidateChip({ candidate }) {
   );
 }
 
+/* ── Video screen pill ─────────────────────────────────────────── */
+function ScreenPill({ screens }) {
+  if (!screens || screens.length === 0) return null;
+  const pending = screens.filter(s => !s.hm_decision).length;
+  const go      = screens.filter(s => s.hm_decision === 'go').length;
+  const noGo    = screens.filter(s => s.hm_decision === 'no_go').length;
+
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+      <span>📹</span>
+      <span>{screens.length} screen{screens.length !== 1 ? 's' : ''}</span>
+      {go > 0 && <span className="text-green-700">· {go} go</span>}
+      {noGo > 0 && <span className="text-red-700">· {noGo} no-go</span>}
+      {pending > 0 && <span className="text-amber-600">· {pending} pending</span>}
+    </div>
+  );
+}
+
 /* ── Per-req card ──────────────────────────────────────────────── */
-function ReqHealthCard({ req, candidates, stages, hmStage }) {
+function ReqHealthCard({ req, candidates, stages, hmStage, screens, showScreens }) {
   const [expanded, setExpanded] = useState(false);
 
   const activeStages = stages.filter(s => !s.is_terminal).sort((a, b) => a.order_index - b.order_index);
@@ -172,9 +190,10 @@ function ReqHealthCard({ req, candidates, stages, hmStage }) {
           }`}>
             {totalActive} total{isHeavy ? ' ⚡ heavy' : ''}
           </div>
+          {showScreens && <ScreenPill screens={screens} />}
 
           {/* Expand toggle */}
-          {hmPlusCands.length > 0 && (
+          {(hmPlusCands.length > 0 || (screens && screens.length > 0)) && (
             <button
               onClick={() => setExpanded(e => !e)}
               className="ml-auto text-xs text-slate-500 hover:text-slate-700 underline shrink-0"
@@ -235,6 +254,28 @@ function ReqHealthCard({ req, candidates, stages, hmStage }) {
               </div>
             </>
           )}
+
+          {showScreens && screens && screens.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-1">
+                📹 Video Screens
+              </p>
+              <div className="space-y-1.5">
+                {screens.map(s => {
+                  const decisionIcon = s.hm_decision === 'go' ? '✅' : s.hm_decision === 'no_go' ? '❌' : '⏳';
+                  const decisionLabel = s.hm_decision === 'go' ? 'Go' : s.hm_decision === 'no_go' ? 'No Go' : 'Pending';
+                  return (
+                    <div key={s.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-white border-slate-200 text-xs">
+                      <span>{decisionIcon}</span>
+                      <span className="font-medium text-slate-800 truncate">{s.candidate_name}</span>
+                      <span className="ml-auto text-slate-500 shrink-0">{decisionLabel}</span>
+                      {s.hm_name && <span className="text-slate-400 shrink-0">· {s.hm_name}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -287,20 +328,24 @@ export default function PipelineHealth() {
   const [reqs,         setReqs]         = useState([]);
   const [candidates,   setCandidates]   = useState([]);
   const [stages,       setStages]       = useState([]);
+  const [screens,      setScreens]      = useState([]);
+  const [showScreens,  setShowScreens]  = useState(true);
   const [statusFilter, setStatusFilter] = useState(null); // null = All
   const [hmFilter,     setHmFilter]     = useState('');
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [r, c, s] = await Promise.all([
+      const [r, c, s, sc] = await Promise.all([
         api.getReqs(),
         api.getCandidates(),
         api.getStages(),
+        api.getAllScreens().catch(() => []),
       ]);
       setReqs(Array.isArray(r) ? r : []);
       setCandidates(Array.isArray(c) ? c : []);
       setStages(Array.isArray(s) ? s : []);
+      setScreens(Array.isArray(sc) ? sc : []);
       setLoading(false);
     }
     load();
@@ -348,6 +393,13 @@ export default function PipelineHealth() {
     return STATUS_RANK[a.status] - STATUS_RANK[b.status];
   });
 
+  /* ── Group screens by req_id ──────────────────────────────────── */
+  const screensByReq = {};
+  for (const s of screens) {
+    if (!screensByReq[s.req_id]) screensByReq[s.req_id] = [];
+    screensByReq[s.req_id].push(s);
+  }
+
   /* ── Apply active filters ─────────────────────────────────────── */
   const filteredReqs = reqsWithStatus.filter(({ req, status }) => {
     if (statusFilter && status !== statusFilter) return false;
@@ -377,6 +429,17 @@ export default function PipelineHealth() {
             onFilter={setStatusFilter}
           />
           <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setShowScreens(s => !s)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+                showScreens
+                  ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
+                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>📹</span>
+              <span>{showScreens ? 'Screens on' : 'Screens off'}</span>
+            </button>
             {allHMs.length > 0 && (
               <select
                 value={hmFilter}
@@ -424,6 +487,8 @@ export default function PipelineHealth() {
               candidates={candsByReq[req.id] || []}
               stages={stages}
               hmStage={hmStage}
+              screens={screensByReq[req.id] || []}
+              showScreens={showScreens}
             />
           ))}
         </div>

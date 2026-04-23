@@ -37,6 +37,7 @@ app.use('/api/interview-plans',  require('./routes/interviewPlans'));
 app.use('/api/pokedex',          require('./routes/pokedex'));
 app.use('/api/workday',              require('./routes/workday'));
 app.use('/api/scheduling-requests',  require('./routes/schedulingRequests'));
+app.use('/api/screens',              require('./routes/screens'));
 
 // Serve the built React app whenever the dist folder exists.
 // Works in production (Railway) without requiring NODE_ENV to be set.

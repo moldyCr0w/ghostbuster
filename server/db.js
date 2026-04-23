@@ -98,6 +98,22 @@ db.exec(`
     created_at    TEXT    DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS video_screens (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id  INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    req_id        INTEGER NOT NULL REFERENCES reqs(id)       ON DELETE CASCADE,
+    summary       TEXT,
+    share_token   TEXT UNIQUE,
+    hm_decision   TEXT,
+    hm_name       TEXT,
+    hm_notes      TEXT,
+    decided_at    TEXT,
+    created_by    TEXT,
+    created_at    TEXT DEFAULT (datetime('now')),
+    updated_at    TEXT DEFAULT (datetime('now')),
+    UNIQUE(candidate_id, req_id)
+  );
+
   CREATE TABLE IF NOT EXISTS notifications (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     type           TEXT    NOT NULL,

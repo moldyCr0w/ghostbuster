@@ -19,6 +19,7 @@ import CareersHub    from './pages/CareersHub';
 import InterviewPlans from './pages/InterviewPlans';
 import PipelineHealth, { computeNavHealth, NAV_DOT_COLORS } from './pages/PipelineHealth';
 import SchedulingDashboard from './pages/SchedulingDashboard';
+import ScreenReview        from './pages/ScreenReview';
 
 /* ── Notification bell (sidebar) ─────────────────────────────── */
 function NotificationBell() {
@@ -290,6 +291,7 @@ export default function App() {
         <Route path="/schedule/:token" element={<Schedule />} />
         <Route path="/jobs"            element={<CareersHub />} />
         <Route path="/jobs/:token"     element={<JobPosting />} />
+        <Route path="/screen/:token"   element={<ScreenReview />} />
 
         {/* Everything else is protected */}
         <Route
