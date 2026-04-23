@@ -48,6 +48,20 @@ const uploadMem = multer({
   },
 });
 
+// In-memory multer for CSV imports
+const uploadCsvMem = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.csv' || file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are accepted'));
+    }
+  },
+});
+
 /* ─── resume text extraction & parsing ──────────────────────── */
 
 async function extractText(buffer, ext) {
@@ -108,6 +122,58 @@ function parseResumeText(text) {
   }
 
   return { first_name, last_name, email, linkedin_url };
+}
+
+/* ─── CSV import helpers ─────────────────────────────────────── */
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { field += ch; }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field); field = '';
+    } else if (ch === '\n') {
+      row.push(field); rows.push(row); row = []; field = '';
+    } else if (ch !== '\r') {
+      field += ch;
+    }
+  }
+  if (field || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function csvToObjects(text) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(f => f.trim()))
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = (r[i] || '').trim(); });
+      return obj;
+    });
+}
+
+function normalizeLinkedIn(raw) {
+  if (!raw || !raw.trim()) return null;
+  const s = raw.trim();
+  if (!/linkedin\.com/i.test(s)) return null;
+  let url = /^https?:\/\//i.test(s) ? s : 'https://' + s.toLowerCase();
+  try {
+    const u = new URL(url);
+    url = u.origin + u.pathname.replace(/\/$/, '');
+  } catch (_) {
+    url = url.split('?')[0].replace(/\/$/, '');
+  }
+  return url;
 }
 
 /* ─── helpers ────────────────────────────────────────────────── */
@@ -203,6 +269,93 @@ function setReqs(candidateId, reqIds, sourcedBy) {
 }
 
 /* ─── routes ─────────────────────────────────────────────────── */
+
+// POST /api/candidates/import-csv — bulk import from a Calendly CSV export.
+// Matches rows to open reqs via the JR number prefix in "Event Type Name".
+// LinkedIn URL is read from "Response 1". Skips cancelled and duplicate rows.
+router.post('/import-csv', requireAuth, uploadCsvMem.single('csv'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No CSV file received' });
+
+  const rows = csvToObjects(req.file.buffer.toString('utf-8'));
+
+  const phoneStage =
+    db.prepare("SELECT id FROM stages WHERE name = 'Phone Screen'").get() ||
+    db.prepare('SELECT id FROM stages WHERE is_terminal=0 ORDER BY order_index LIMIT 1').get();
+  if (!phoneStage) return res.status(500).json({ error: 'No suitable stage found' });
+
+  const created = [], skipped = [], errors = [];
+
+  for (const row of rows) {
+    try {
+      if ((row['Canceled'] || '').toUpperCase() === 'TRUE') {
+        skipped.push({ name: `${row['Invitee First Name'] || ''} ${row['Invitee Last Name'] || ''}`.trim(), reason: 'cancelled' });
+        continue;
+      }
+
+      const firstName = (row['Invitee First Name'] || '').trim();
+      const lastName  = (row['Invitee Last Name']  || '').trim();
+      const email     = (row['Invitee Email']       || '').trim().toLowerCase() || null;
+      const eventType = (row['Event Type Name']     || '').trim();
+      const linkedIn  = normalizeLinkedIn(row['Response 1']);
+      // "2026-04-24 14:30" → "2026-04-24"
+      const startDate = (row['Start Date & Time']   || '').split(' ')[0] || null;
+
+      if (!firstName) {
+        skipped.push({ name: email || 'unknown', reason: 'no name' });
+        continue;
+      }
+
+      // Match req by JR number prefix in event type name (e.g. "JR101664 Senior Data Scientist")
+      let matchedReqId = null;
+      const jrMatch = eventType.match(/^(JR\d+)/i);
+      if (jrMatch) {
+        const matched = db.prepare('SELECT id FROM reqs WHERE UPPER(req_id) = UPPER(?)').get(jrMatch[1]);
+        if (matched) matchedReqId = matched.id;
+      }
+
+      // Deduplicate by email — if candidate exists, just add the req link and skip creation
+      if (email) {
+        const existing = db.prepare('SELECT id FROM candidates WHERE LOWER(email) = LOWER(?)').get(email);
+        if (existing) {
+          if (matchedReqId) {
+            db.prepare('INSERT OR IGNORE INTO candidate_reqs (candidate_id, req_id, sourced_by) VALUES (?, ?, ?)').run(existing.id, matchedReqId, req.user?.id || null);
+          }
+          skipped.push({ name: `${firstName} ${lastName}`.trim(), reason: 'already exists' });
+          continue;
+        }
+      }
+
+      const name        = [firstName, lastName].filter(Boolean).join(' ');
+      const nextDue     = startDate ? bizDaysFrom(startDate, 5) : bizDaysFromNow(5);
+      const enteredAt   = startDate ? `${startDate}T00:00:00` : new Date().toISOString();
+
+      const newId = db.transaction(() => {
+        const r = db.prepare(`
+          INSERT INTO candidates
+            (name, first_name, last_name, email, stage_id,
+             linkedin_url, next_step_due, stage_entered_at, stage_event_date)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(name, firstName, lastName || null, email, phoneStage.id, linkedIn, nextDue, enteredAt, startDate);
+        const id = r.lastInsertRowid;
+        if (matchedReqId) {
+          db.prepare('INSERT OR IGNORE INTO candidate_reqs (candidate_id, req_id, sourced_by) VALUES (?, ?, ?)').run(id, matchedReqId, req.user?.id || null);
+        }
+        return id;
+      })();
+
+      created.push({ id: newId, name, event_type: eventType });
+    } catch (err) {
+      errors.push({ name: `${row['Invitee First Name'] || ''} ${row['Invitee Last Name'] || ''}`.trim(), error: err.message });
+    }
+  }
+
+  res.json({
+    created: created.length,
+    skipped: skipped.length,
+    errors:  errors.length,
+    details: { created, skipped, errors },
+  });
+});
 
 // POST /api/candidates/parse-resume — extract fields from a resume file (no disk write)
 router.post('/parse-resume', uploadMem.single('resume'), async (req, res) => {
