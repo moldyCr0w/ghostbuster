@@ -13,7 +13,6 @@ export default function WorkdayPushModal({ candidate, onClose, onSuccess }) {
   const [selectedSlotId, setSelectedSlotId] = useState('');
   const [manualReqId, setManualReqId]       = useState('');
   const [useManual, setUseManual]           = useState(false);
-  const [confirmed, setConfirmed]           = useState(false);
   const [pushing, setPushing]               = useState(false);
   const [error, setError]                   = useState('');
 
@@ -39,7 +38,7 @@ export default function WorkdayPushModal({ candidate, onClose, onSuccess }) {
 
   const selectedSlot = slots.find(s => String(s.id) === selectedSlotId) || null;
   const resolvedReqId = useManual ? manualReqId.trim() : selectedSlot?.wd_req_id || '';
-  const canPush = confirmed && resolvedReqId;
+  const canPush = !!resolvedReqId;
 
   const handlePush = async () => {
     if (!canPush) return;
@@ -185,22 +184,6 @@ export default function WorkdayPushModal({ candidate, onClose, onSuccess }) {
               </>
             )}
           </div>
-
-          {/* Verbal offer confirmation */}
-          <label className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={e => setConfirmed(e.target.checked)}
-              className="mt-0.5 accent-blue-600"
-            />
-            <div>
-              <p className="text-sm font-medium text-slate-700">A verbal offer has been extended to this candidate</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Pushing to Workday will initiate the written offer process in your HRIS.
-              </p>
-            </div>
-          </label>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-2">{error}</p>
