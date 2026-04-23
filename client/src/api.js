@@ -66,6 +66,15 @@ export const api = {
   getVideoNotes:  (candId)       => req(`/candidates/${candId}/video-notes`),
   addVideoNote:   (candId, data) => req(`/candidates/${candId}/video-notes`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // ── Video screens (HM share) ────────────────────────────────
+  getAllScreens:      ()              => req('/screens/all'),
+  getCandidateScreens:(candId)       => req(`/screens/candidate/${candId}`),
+  createScreen:      (data)          => req('/screens',      { method: 'POST',   body: JSON.stringify(data) }),
+  updateScreen:      (id, data)      => req(`/screens/${id}`,{ method: 'PUT',    body: JSON.stringify(data) }),
+  deleteScreen:      (id)            => req(`/screens/${id}`,{ method: 'DELETE' }),
+  getSharedScreen:   (token)         => req(`/screens/share/${token}`),
+  submitDecision:    (token, data)   => req(`/screens/share/${token}/decision`, { method: 'PATCH', body: JSON.stringify(data) }),
+
   // ── Candidate scores ──────────────────────────────────────
   getCandidateScores: (candId, reqId) => req(`/candidates/${candId}/scores?req_id=${reqId}`),
   saveCandidateScores:(candId, data)  => req(`/candidates/${candId}/scores`, { method: 'PUT', body: JSON.stringify(data) }),
