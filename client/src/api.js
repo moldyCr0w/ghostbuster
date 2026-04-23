@@ -34,6 +34,11 @@ export const api = {
     fd.append('resume', file);
     return fetch(`${BASE}/candidates/parse-resume`, { method: 'POST', body: fd }).then(r => r.json());
   },
+  importCsv: (file) => {
+    const fd = new FormData();
+    fd.append('csv', file);
+    return fetch(`${BASE}/candidates/import-csv`, { method: 'POST', body: fd }).then(r => r.json());
+  },
 
   // HM view — append a note without a login session
   addHmNote: (id, note, author) => req(`/candidates/${id}/hm-note`, {

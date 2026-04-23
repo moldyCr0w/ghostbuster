@@ -83,8 +83,9 @@ async function sendDailyInterviewReport() {
     return;
   }
 
-  const dateLabel = yesterday.toLocaleDateString('en-US', {
+  const dateLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    timeZone: 'America/New_York',
   });
 
   const subject = `Daily Interview Report — ${dateLabel}`;

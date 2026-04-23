@@ -24,6 +24,9 @@ export default function Candidates() {
   const [modal, setModal]           = useState(false);
   const [editing, setEditing]       = useState(null);
   const [loading, setLoading]       = useState(true);
+  const [importResult, setImportResult] = useState(null);
+  const [importing, setImporting]   = useState(false);
+  const csvInputRef = React.useRef(null);
 
   const load = useCallback(async () => {
     const [cands, stgs] = await Promise.all([api.getCandidates(), api.getStages()]);
@@ -64,6 +67,23 @@ export default function Candidates() {
 
   const openAdd  = () => { setEditing(null); setModal(true); };
   const openEdit = (c) => { setEditing(c);  setModal(true); };
+
+  const handleCsvImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const result = await api.importCsv(file);
+      setImportResult(result);
+      if (result.created > 0) load();
+    } catch (_) {
+      setImportResult({ error: 'Import failed — check the file and try again.' });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleDelete = async (c) => {
     const name = c.display_name || c.first_name || c.name || 'this candidate';
@@ -118,13 +138,40 @@ export default function Candidates() {
           <h1 className="text-2xl font-bold text-slate-800">Candidates</h1>
           <p className="text-slate-400 text-sm mt-0.5">{candidates.length} total</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <span className="text-base leading-none">+</span> Add Candidate
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleCsvImport}
+          />
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-300 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            {importing ? 'Importing…' : 'Import CSV'}
+          </button>
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <span className="text-base leading-none">+</span> Add Candidate
+          </button>
+        </div>
       </div>
+
+      {importResult && (
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm flex items-start justify-between gap-4 ${importResult.error ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>
+          <span>
+            {importResult.error
+              ? importResult.error
+              : `Import complete — ${importResult.created} added, ${importResult.skipped} skipped, ${importResult.errors} errors.`}
+          </span>
+          <button onClick={() => setImportResult(null)} className="shrink-0 text-current opacity-50 hover:opacity-100">✕</button>
+        </div>
+      )}
 
       {/* Search + dropdowns */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
