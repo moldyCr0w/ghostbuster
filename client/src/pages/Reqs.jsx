@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import TurndownService from 'turndown';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
+
+const turndown = new TurndownService({ headingStyle: 'atx', bulletListMarker: '-' });
 
 const STATUS_STYLES = {
   open:     'bg-green-100 text-green-700 border border-green-200',
@@ -319,8 +322,17 @@ export default function Reqs() {
                               <textarea
                                 value={editForm.job_description}
                                 onChange={setEdit('job_description')}
+                                onPaste={(e) => {
+                                  const html = e.clipboardData.getData('text/html');
+                                  if (!html) return;
+                                  e.preventDefault();
+                                  const md = turndown.turndown(html);
+                                  const el = e.target;
+                                  const next = editForm.job_description.slice(0, el.selectionStart) + md + editForm.job_description.slice(el.selectionEnd);
+                                  setEditForm(f => ({ ...f, job_description: next }));
+                                }}
                                 rows={6}
-                                placeholder="Supports **markdown** — headers, bullets, bold, links…"
+                                placeholder="Supports **markdown** — paste from Word/Docs or type headers, bullets, bold…"
                                 className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono"
                               />
                             )}
