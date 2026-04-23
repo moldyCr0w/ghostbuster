@@ -534,13 +534,25 @@ export default function Board() {
     c => c.next_step_due && c.next_step_due < today
   ).length;
 
-  const openReqs = reqs.filter(r => r.status !== 'closed' && r.status !== 'filled');
+  const openReqs = reqs
+    .filter(r => r.status !== 'closed' && r.status !== 'filled')
+    .sort((a, b) => a.title.localeCompare(b.title));
+
+  // Active (non-terminal) candidate count per req — used for tab badges
+  const candCountByReq = {};
+  for (const c of activeCandidates.filter(c => !c.is_terminal)) {
+    for (const r of (c.reqs || [])) {
+      candCountByReq[r.id] = (candCountByReq[r.id] || 0) + 1;
+    }
+  }
 
   // Sourcer options: users who appear as sourced_by on at least one candidate's req
   const sourcerIds = new Set(
     candidates.flatMap(c => (c.reqs || []).map(r => r.sourced_by).filter(Boolean))
   );
-  const sourcerOptions = users.filter(u => sourcerIds.has(u.id));
+  const sourcerOptions = users
+    .filter(u => sourcerIds.has(u.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   // Recruiter options: unique recruiter names from open reqs that have one
   const recruiterOptions = [...new Set(
@@ -552,7 +564,8 @@ export default function Board() {
 
       {/* ── Header ── */}
       <div className="px-8 pt-8 pb-4 shrink-0">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        {/* Row 1: title + stats + secondary filters */}
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Board</h1>
             <p className="text-slate-400 text-sm mt-0.5">
@@ -560,114 +573,106 @@ export default function Board() {
             </p>
           </div>
 
-          {/* Stats + filter */}
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Summary pills */}
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
-                {totalActive} active
+            <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
+              {totalActive} active
+            </span>
+            {totalOverdue > 0 && (
+              <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
+                🚨 {totalOverdue} overdue
               </span>
-              {totalOverdue > 0 && (
-                <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
-                  🚨 {totalOverdue} overdue
-                </span>
-              )}
-            </div>
-
-            {/* Req filter */}
-            {openReqs.length > 0 && (
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Req:</label>
-                <select
-                  value={reqFilter}
-                  onChange={e => setReqFilter(e.target.value)}
-                  className={`text-sm rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    reqFilter
-                      ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
-                      : 'border-slate-200 bg-white text-slate-600'
-                  }`}
-                >
-                  <option value="">All candidates</option>
-                  {openReqs.map(r => (
-                    <option key={r.id} value={r.id}>
-                      {r.title}{r.total_hc > 0 ? ` (${r.open_hc}/${r.total_hc} HC open)` : ''}
-                    </option>
-                  ))}
-                </select>
-                {reqFilter && (
-                  <button
-                    onClick={() => setReqFilter('')}
-                    className="text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
             )}
 
             {/* Sourcer filter */}
             {sourcerOptions.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Sourcer:</label>
                 <select
                   value={sourcerFilter}
                   onChange={e => setSourcerFilter(e.target.value)}
-                  className={`text-sm rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  className={`text-xs rounded-lg px-2.5 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     sourcerFilter
                       ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
                       : 'border-slate-200 bg-white text-slate-600'
                   }`}
                 >
-                  <option value="">All sourcers</option>
+                  <option value="">All</option>
                   {sourcerOptions.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
+                    <option key={u.id} value={u.id}>{u.name}</option>
                   ))}
                 </select>
                 {sourcerFilter && (
-                  <button
-                    onClick={() => setSourcerFilter('')}
-                    className="text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => setSourcerFilter('')} className="text-xs text-slate-400 hover:text-slate-600">✕</button>
                 )}
               </div>
             )}
 
             {/* Recruiter filter */}
             {recruiterOptions.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Recruiter:</label>
                 <select
                   value={recruiterFilter}
                   onChange={e => setRecruiterFilter(e.target.value)}
-                  className={`text-sm rounded-lg px-3 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  className={`text-xs rounded-lg px-2.5 py-1.5 border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     recruiterFilter
                       ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
                       : 'border-slate-200 bg-white text-slate-600'
                   }`}
                 >
-                  <option value="">All recruiters</option>
+                  <option value="">All</option>
                   {recruiterOptions.map(name => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
+                    <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
                 {recruiterFilter && (
-                  <button
-                    onClick={() => setRecruiterFilter('')}
-                    className="text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => setRecruiterFilter('')} className="text-xs text-slate-400 hover:text-slate-600">✕</button>
                 )}
               </div>
             )}
           </div>
         </div>
+
+        {/* Row 2: Req tabs */}
+        {openReqs.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              onClick={() => setReqFilter('')}
+              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                !reqFilter
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              All
+              <span className="ml-1.5 opacity-60">({totalActive})</span>
+            </button>
+            {openReqs.map(r => {
+              const count = candCountByReq[r.id] || 0;
+              const isActive = String(reqFilter) === String(r.id);
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setReqFilter(String(r.id))}
+                  className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                    isActive
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {r.title}
+                  {r.total_hc > 0 && (
+                    <span className={`ml-1 text-xs ${isActive ? 'opacity-70' : 'text-slate-400'}`}>
+                      {r.open_hc}/{r.total_hc} HC
+                    </span>
+                  )}
+                  <span className="ml-1.5 opacity-60">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Kanban columns ── */}
