@@ -324,11 +324,14 @@ export default function Reqs() {
                                 onChange={setEdit('job_description')}
                                 onPaste={(e) => {
                                   const html = e.clipboardData.getData('text/html');
-                                  if (!html) return;
+                                  const plain = e.clipboardData.getData('text/plain');
+                                  if (!html && !plain) return;
                                   e.preventDefault();
-                                  const md = turndown.turndown(html);
+                                  const md = html ? turndown.turndown(html).trim() : '';
+                                  const insert = md || plain || '';
+                                  if (!insert) return;
                                   const el = e.target;
-                                  const next = editForm.job_description.slice(0, el.selectionStart) + md + editForm.job_description.slice(el.selectionEnd);
+                                  const next = editForm.job_description.slice(0, el.selectionStart) + insert + editForm.job_description.slice(el.selectionEnd);
                                   setEditForm(f => ({ ...f, job_description: next }));
                                 }}
                                 rows={6}

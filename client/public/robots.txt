@@ -1,4 +1,4 @@
 User-agent: *
-Disallow: /jobs/
+Disallow: /jobs
 Disallow: /schedule/
 Disallow: /hm/
