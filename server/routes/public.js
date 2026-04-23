@@ -40,7 +40,7 @@ router.get('/jobs', (_req, res) => {
     `SELECT req_id, title, department, public_token
      FROM reqs
      WHERE is_public = 1 AND status = 'open'
-     ORDER BY created_at DESC`
+     ORDER BY id DESC`
   ).all();
   res.json(rows);
 });
