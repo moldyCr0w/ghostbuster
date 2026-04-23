@@ -32,6 +32,19 @@ const upload = multer({
   },
 });
 
+/* ─── GET /api/public/jobs ───────────────────────────────────── */
+// Returns all public, open jobs for the careers hub listing.
+
+router.get('/jobs', (_req, res) => {
+  const rows = db.prepare(
+    `SELECT req_id, title, department, public_token
+     FROM reqs
+     WHERE is_public = 1 AND status = 'open'
+     ORDER BY created_at DESC`
+  ).all();
+  res.json(rows);
+});
+
 /* ─── GET /api/public/jobs/:token ────────────────────────────── */
 // Returns job details for the public posting page (no auth required).
 

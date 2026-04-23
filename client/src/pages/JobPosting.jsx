@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useParams } from 'react-router-dom';
 
@@ -173,7 +174,7 @@ export default function JobPosting() {
           <div className="text-violet-700">
             <StordLogo />
           </div>
-          <span className="text-xs text-slate-400">Careers</span>
+          <Link to="/jobs" className="text-xs text-slate-500 hover:text-violet-700 transition-colors font-medium">← All openings</Link>
         </div>
       </header>
 
