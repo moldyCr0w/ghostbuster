@@ -429,17 +429,19 @@ export default function PipelineHealth() {
             onFilter={setStatusFilter}
           />
           <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => setShowScreens(s => !s)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
-                showScreens
-                  ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
-                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <span>📹</span>
-              <span>{showScreens ? 'Screens on' : 'Screens off'}</span>
-            </button>
+            {screens.length > 0 && (
+              <button
+                onClick={() => setShowScreens(s => !s)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+                  showScreens
+                    ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>📹</span>
+                <span>{showScreens ? `Screens on (${screens.length})` : 'Screens off'}</span>
+              </button>
+            )}
             {allHMs.length > 0 && (
               <select
                 value={hmFilter}
