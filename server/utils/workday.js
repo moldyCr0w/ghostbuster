@@ -1,11 +1,13 @@
 /**
  * Workday Recruiting REST API client.
  *
- * Auth: OAuth 2.0 Client Credentials (system-to-system, no user involvement).
+ * Auth: OAuth 2.0 Authorization Code — uses a refresh token to obtain
+ * short-lived access tokens (no user interaction required at runtime).
  *
  * Required env vars:
  *   WORKDAY_CLIENT_ID       — API client ID from Workday tenant setup
  *   WORKDAY_CLIENT_SECRET   — API client secret
+ *   WORKDAY_REFRESH_TOKEN   — long-lived refresh token issued by Workday admin
  *   WORKDAY_TOKEN_URL       — e.g. https://<host>/ccx/oauth2/<tenant>/token
  *   WORKDAY_API_BASE_URL    — e.g. https://<host>/ccx/api/recruiting/v2/<tenant>
  */
@@ -23,13 +25,14 @@ async function getToken() {
     return _cachedToken;
   }
 
-  const { WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, WORKDAY_TOKEN_URL } = process.env;
-  if (!WORKDAY_CLIENT_ID || !WORKDAY_CLIENT_SECRET || !WORKDAY_TOKEN_URL) {
-    throw new Error('Workday env vars not configured (WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, WORKDAY_TOKEN_URL)');
+  const { WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, WORKDAY_REFRESH_TOKEN, WORKDAY_TOKEN_URL } = process.env;
+  if (!WORKDAY_CLIENT_ID || !WORKDAY_CLIENT_SECRET || !WORKDAY_REFRESH_TOKEN || !WORKDAY_TOKEN_URL) {
+    throw new Error('Workday env vars not configured (WORKDAY_CLIENT_ID, WORKDAY_CLIENT_SECRET, WORKDAY_REFRESH_TOKEN, WORKDAY_TOKEN_URL)');
   }
 
   const body = new URLSearchParams({
-    grant_type:    'client_credentials',
+    grant_type:    'refresh_token',
+    refresh_token: WORKDAY_REFRESH_TOKEN,
     client_id:     WORKDAY_CLIENT_ID,
     client_secret: WORKDAY_CLIENT_SECRET,
   });
