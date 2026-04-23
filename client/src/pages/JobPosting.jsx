@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { useParams } from 'react-router-dom';
 
 /* ── Stord logo SVG (inline, no external dependency) ──────────── */
@@ -10,12 +11,12 @@ function StordLogo({ className = 'h-8' }) {
   );
 }
 
-/* ── Render plain-text job description preserving line breaks ─── */
+/* ── Render markdown job description ─────────────────────────── */
 function JobDescription({ text }) {
   if (!text) return null;
   return (
-    <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
-      {text}
+    <div className="text-slate-700 text-sm leading-relaxed markdown-body">
+      <ReactMarkdown>{text}</ReactMarkdown>
     </div>
   );
 }
