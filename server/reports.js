@@ -42,16 +42,26 @@ async function sendDailyInterviewReport() {
   ).get();
   if (lastSent?.value === today) return;
 
+  // Only fire on weekdays. Saturday (6) and Sunday (0) are skipped entirely.
+  const DOW = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const weekdayStr = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date());
+  const dowEastern = DOW[weekdayStr];
+  if (dowEastern === 0 || dowEastern === 6) {
+    console.log('[reports] Weekend — skipping daily report');
+    return;
+  }
+
   // Mark sent immediately — prevents double-send if called concurrently
   db.prepare(
     "INSERT OR REPLACE INTO settings (key, value) VALUES ('daily_report_last_sent', ?)"
   ).run(today);
 
-  // Yesterday in Eastern time — subtract 24 h then re-derive the Eastern date
-  const yesterdayStr = easternDateStr(new Date(Date.now() - 864e5));
+  // Look back to the previous business day: Monday reports Friday's interviews.
+  const lookbackDays = dowEastern === 1 ? 3 : 1;
+  const yesterdayStr = easternDateStr(new Date(Date.now() - lookbackDays * 864e5));
 
-  // Find candidates whose interview date was yesterday.
-  // GROUP_CONCAT aggregates all linked req titles into a comma-separated string.
+  // Find candidates whose interview date was the last business day,
+  // restricted to HM Review and later stages (phone/video screens excluded).
   const rows = db.prepare(`
     SELECT
       COALESCE(
@@ -65,6 +75,7 @@ async function sendDailyInterviewReport() {
     LEFT JOIN candidate_reqs cr ON cr.candidate_id = c.id
     LEFT JOIN reqs r            ON r.id  = cr.req_id
     WHERE c.stage_event_date = ?
+      AND s.order_index >= (SELECT order_index FROM stages WHERE is_hm_review = 1 LIMIT 1)
     GROUP BY c.id
     ORDER BY candidate_name
   `).all(yesterdayStr);
@@ -74,16 +85,16 @@ async function sendDailyInterviewReport() {
     return;
   }
 
-  const coordinators = db.prepare(
+  const recipients = db.prepare(
     'SELECT name, email FROM users'
   ).all();
 
-  if (coordinators.length === 0) {
+  if (recipients.length === 0) {
     console.log('[reports] No users found — skipping daily report email');
     return;
   }
 
-  const dateLabel = new Date(Date.now() - 864e5).toLocaleDateString('en-US', {
+  const dateLabel = new Date(Date.now() - lookbackDays * 864e5).toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     timeZone: 'America/New_York',
   });
@@ -152,12 +163,12 @@ async function sendDailyInterviewReport() {
     </div>`;
 
   await Promise.allSettled(
-    coordinators.map(c => sendMail({ to: c.email, subject, text, html }))
+    recipients.map(c => sendMail({ to: c.email, subject, text, html }))
   );
 
   console.log(
     `[reports] Sent daily interview report for ${yesterdayStr} ` +
-    `to ${coordinators.length} coordinator(s) — ${rows.length} interviewee(s)`
+    `to ${recipients.length} user(s) — ${rows.length} interviewee(s)`
   );
 }
 

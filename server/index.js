@@ -75,6 +75,9 @@ app.listen(PORT, () => {
 
   setInterval(() => {
     sendHmReminders().catch(err => console.error('[reminders] Hourly check failed:', err.message));
+  }, 60 * 60 * 1000);
+
+  setInterval(() => {
     checkDailyReport();
-  }, 60 * 60 * 1000); // every hour
+  }, 5 * 60 * 1000);
 });
